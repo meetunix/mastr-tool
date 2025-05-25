@@ -58,7 +58,7 @@ class MastrOption:
 
 class MastrType(Enum):
     WIND = MastrOption(Einheiten.EinheitenWind, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET})
-    SOLAR = MastrOption(Einheiten.EinheitenSolar, False, True, {DataFormats.CSV, DataFormats.PARQUET})
+    SOLAR = MastrOption(Einheiten.EinheitenSolar, True, True, {DataFormats.CSV, DataFormats.PARQUET})
 
 
 class MastrExporter:
@@ -208,7 +208,7 @@ class MastrExporter:
             # until python 3.14 it is absolutely not recommended to use polars with multiprocessing
             # execute_jobs_in_parallel(self.concurrency, write_parquet_parallel, parquet_jobs)
             for job in parquet_jobs:
-                print(f"{job.name}")
+                print(f"\t{job.name}")
                 write_parquet_parallel(job)
 
     def __copy_to(self, stmt: str, file_path: Path):
@@ -238,7 +238,7 @@ def write_excel_parallel(job: ConvertExportJob) -> None:
 
 
 def write_parquet_parallel(job: ConvertExportJob) -> None:
-    df = pl.scan_csv(job.csv_source_file, infer_schema_length=None) # scan whole data first to infer schema
+    df = pl.scan_csv(job.csv_source_file, infer_schema_length=None, low_memory=True) # scan whole data first to infer schema
     df.sink_parquet(job.file_output_path, compression="zstd")
 
 
