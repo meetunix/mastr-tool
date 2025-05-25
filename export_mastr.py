@@ -165,7 +165,7 @@ class MastrExporter:
                 job = CsvExportJob(name=state, file_output_path=csv_path, sql_stmt=stmt, force_file_write=force)
                 csv_jobs.append(job)
 
-        #execute_jobs_in_parallel(self.concurrency, write_csv_parallel, csv_jobs)
+        execute_jobs_in_parallel(self.concurrency, write_csv_parallel, csv_jobs)
 
     @timer
     def write_excel(self, type: MastrType) -> None:
@@ -185,7 +185,7 @@ class MastrExporter:
                 job = ConvertExportJob(name=file_descr, file_output_path=excel_path, csv_source_file=csv_path)
                 excel_jobs.append(job)
 
-            #execute_jobs_in_parallel(self.concurrency, write_excel_parallel, excel_jobs)
+            execute_jobs_in_parallel(self.concurrency, write_excel_parallel, excel_jobs)
 
     @timer
     def write_parquet(self, type: MastrType) -> None:
