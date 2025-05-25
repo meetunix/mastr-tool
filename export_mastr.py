@@ -50,7 +50,7 @@ class ConvertExportJob(ExportJob):
 
 @dataclass
 class MastrOption:
-    entity: Einheiten.value
+    entity: Einheiten
     germany: bool
     states: bool
     data_formats: set[DataFormats]
@@ -165,7 +165,7 @@ class MastrExporter:
                 job = CsvExportJob(name=state, file_output_path=csv_path, sql_stmt=stmt, force_file_write=force)
                 csv_jobs.append(job)
 
-        execute_jobs_in_parallel(self.concurrency, write_csv_parallel, csv_jobs)
+        #execute_jobs_in_parallel(self.concurrency, write_csv_parallel, csv_jobs)
 
     @timer
     def write_excel(self, type: MastrType) -> None:
@@ -185,7 +185,7 @@ class MastrExporter:
                 job = ConvertExportJob(name=file_descr, file_output_path=excel_path, csv_source_file=csv_path)
                 excel_jobs.append(job)
 
-            execute_jobs_in_parallel(self.concurrency, write_excel_parallel, excel_jobs)
+            #execute_jobs_in_parallel(self.concurrency, write_excel_parallel, excel_jobs)
 
     @timer
     def write_parquet(self, type: MastrType) -> None:
@@ -205,7 +205,11 @@ class MastrExporter:
                 job = ConvertExportJob(name=file_descr, file_output_path=parq_path, csv_source_file=csv_path)
                 parquet_jobs.append(job)
 
-            execute_jobs_in_parallel(self.concurrency, write_parquet_parallel, parquet_jobs)
+            # until python 3.14 it is absolutely not recommended to use polars with multiprocessing
+            # execute_jobs_in_parallel(self.concurrency, write_parquet_parallel, parquet_jobs)
+            for job in parquet_jobs:
+                print(f"{job.name}")
+                write_parquet_parallel(job)
 
     def __copy_to(self, stmt: str, file_path: Path):
         with open(file_path, "w", encoding="utf-8") as f:
@@ -234,8 +238,8 @@ def write_excel_parallel(job: ConvertExportJob) -> None:
 
 
 def write_parquet_parallel(job: ConvertExportJob) -> None:
-    df = pl.read_csv(job.csv_source_file, infer_schema_length=None)
-    df.write_parquet(job.file_output_path, compression="zstd")
+    df = pl.scan_csv(job.csv_source_file, infer_schema_length=None) # scan whole data first to infer schema
+    df.sink_parquet(job.file_output_path, compression="zstd")
 
 
 def execute_jobs_in_parallel(concurrency: int, func, jobs: list[ExportJob]) -> None:
