@@ -2,6 +2,7 @@
 import argparse
 import time
 from dataclasses import dataclass
+from multiprocessing import Pool
 from typing import Optional
 
 from db.db_utils import get_db_connection
@@ -31,8 +32,25 @@ class DataFormats(Enum):
 
 
 @dataclass
+class ExportJob:
+    name: str  # e.g. germany or state
+    file_output_path: Path
+
+
+@dataclass
+class CsvExportJob(ExportJob):
+    sql_stmt: str
+    force_file_write: bool
+
+
+@dataclass
+class ConvertExportJob(ExportJob):
+    csv_source_file: Path
+
+
+@dataclass
 class MastrOption:
-    entity: Einheiten
+    entity: Einheiten.value
     germany: bool
     states: bool
     data_formats: set[DataFormats]
@@ -45,8 +63,9 @@ class MastrType(Enum):
 
 class MastrExporter:
 
-    def __init__(self, connection):
+    def __init__(self, connection, concurrency: int):
         self.conn = connection
+        self.concurrency = concurrency
         self.states: dict[int, str] = self.__create_state_mapping()
         self.csv_files_states: dict[MastrType, list[Path]] = {k: [] for k in MastrType}
         self.csv_files_germany: dict[MastrType, Optional[Path]] = {k: None for k in MastrType}
@@ -121,19 +140,19 @@ class MastrExporter:
     @timer
     def write_csv(self, type: MastrType, out_path: Path, force: bool = True) -> None:
         mastr_option = type.value
+        csv_jobs = []
 
         if mastr_option.germany:
-            # export csv for whole germany
+            # create csv job for whole germany
             stmt = self.select_stmts[type]
             stmt = f"COPY ({stmt}) TO STDOUT WITH (FORMAT CSV, HEADER)"
             csv_path = out_path / Path(f"{type.name.lower()}_deutschland.csv")
             self.csv_files_germany[type] = csv_path
-            if force or not csv_path.exists():
-                self.__copy_to(stmt, csv_path)
+            job = CsvExportJob(name="germany", file_output_path=csv_path, sql_stmt=stmt, force_file_write=force)
+            csv_jobs.append(job)
 
         if mastr_option.states:
-            # export csv for every state
-            # todo parallelize!
+            # create csv job for every state
             for _, state in self.states.items():
                 stmt = self.select_stmts[type]
                 state_filter = self.state_filter.replace("<<STATE>>", state).replace(
@@ -143,13 +162,16 @@ class MastrExporter:
                 stmt = f"COPY ({stmt}) TO STDOUT WITH (FORMAT CSV, HEADER)"
                 csv_path = out_path / Path(f"{type.name.lower()}_{self.latinify(state.lower())}.csv")
                 self.csv_files_states[type].append(csv_path)
-                if force or not csv_path.exists():
-                    self.__copy_to(stmt, csv_path)
+                job = CsvExportJob(name=state, file_output_path=csv_path, sql_stmt=stmt, force_file_write=force)
+                csv_jobs.append(job)
+
+        execute_jobs_in_parallel(self.concurrency, write_csv_parallel, csv_jobs)
 
     @timer
     def write_excel(self, type: MastrType) -> None:
         """Import previously created CSV files and exports them to various Excel files."""
         mastr_option = type.value
+        excel_jobs = []
         if DataFormats.EXCEL in mastr_option.data_formats:
             csv_files = []
             if mastr_option.germany:
@@ -160,13 +182,16 @@ class MastrExporter:
             for csv_path in csv_files:
                 file_descr = ".".join(csv_path.name.split(".")[:-1])
                 excel_path = csv_path.parent / Path(file_descr + ".xlsx")
-                df = pd.read_csv(csv_path, low_memory=False)
-                df.to_excel(excel_path, index=False, sheet_name=file_descr)
+                job = ConvertExportJob(name=file_descr, file_output_path=excel_path, csv_source_file=csv_path)
+                excel_jobs.append(job)
+
+            execute_jobs_in_parallel(self.concurrency, write_excel_parallel, excel_jobs)
 
     @timer
     def write_parquet(self, type: MastrType) -> None:
         """Import previously created CSV files and exports them to various Parquet files."""
         mastr_option = type.value
+        parquet_jobs = []
         if DataFormats.PARQUET in mastr_option.data_formats:
             csv_files = []
             if mastr_option.germany:
@@ -177,8 +202,10 @@ class MastrExporter:
             for csv_path in csv_files:
                 file_descr = ".".join(csv_path.name.split(".")[:-1])
                 parq_path = csv_path.parent / Path(file_descr + ".parq")
-                df = pl.read_csv(csv_path, infer_schema_length=None)
-                df.write_parquet(parq_path, compression="zstd")
+                job = ConvertExportJob(name=file_descr, file_output_path=parq_path, csv_source_file=csv_path)
+                parquet_jobs.append(job)
+
+            execute_jobs_in_parallel(self.concurrency, write_parquet_parallel, parquet_jobs)
 
     def __copy_to(self, stmt: str, file_path: Path):
         with open(file_path, "w", encoding="utf-8") as f:
@@ -191,15 +218,46 @@ class MastrExporter:
             return cursor.fetchall() if returnable else ()
 
 
+### specific export functions for parallel processing ###
+def write_csv_parallel(job: CsvExportJob) -> None:
+    conn = get_db_connection()
+    if job.force_file_write or not job.file_output_path.exists():
+        with open(job.file_output_path, "w", encoding="utf-8") as f:
+            with conn.cursor() as cursor:
+                cursor.copy_expert(sql=job.sql_stmt, file=f)
+    conn.close()
+
+
+def write_excel_parallel(job: ConvertExportJob) -> None:
+    df = pd.read_csv(job.csv_source_file, low_memory=False)
+    df.to_excel(job.file_output_path, index=False, sheet_name=job.name)
+
+
+def write_parquet_parallel(job: ConvertExportJob) -> None:
+    df = pl.read_csv(job.csv_source_file, infer_schema_length=None)
+    df.write_parquet(job.file_output_path, compression="zstd")
+
+
+def execute_jobs_in_parallel(concurrency: int, func, jobs: list[ExportJob]) -> None:
+    with Pool(processes=concurrency) as pool:
+        processes = []
+        for job in jobs:
+            processes.append(pool.apply_async(func, (job,)))
+
+        for proc in processes:
+            proc.get()
+
+
 @timer
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--force", action="store_true", help="Force overriding existent files")
-    parser.add_argument("OUTPUT", type=Path, help="The export directory for csv files")
+    parser.add_argument("--concurrency", type=int, default=4, help="Number of parallel export processes (default: 4)")
+    parser.add_argument("OUTPUT", type=Path, help="The export directory for converted files")
     args = parser.parse_args()
 
     connection = get_db_connection()
-    exporter = MastrExporter(connection)
+    exporter = MastrExporter(connection, args.concurrency)
     for mastr_type in MastrType:
         print(f"--- {mastr_type.name} ---")
         exporter.write_csv(mastr_type, args.OUTPUT, force=args.force)
