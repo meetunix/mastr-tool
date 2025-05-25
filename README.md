@@ -8,7 +8,7 @@ Die mastr-app kann unter https://mastr.nachtsieb.de ausprobiert werden.
 
 ## Download der konvertierten Formate
 
-Die konvertierten Daten werden täglich aus dem Marktstammdatenregister erzäugt und stehen für den automatisierten
+Die konvertierten Daten werden täglich aus dem Marktstammdatenregister erzeugt und stehen für den automatisierten
 Download unter https://mastr-static.nachtsieb.de zur Verfügung.
 
-Die Lizenzbestimmungen finden sich im Impressum auf https://mastr.nachtsieb.de.
+Die Lizenzbestimmungen finden sich unter https://mastr.nachtsieb.de/impressum.
