@@ -75,7 +75,7 @@ mastr_db_import() {
 mastr_csv_export() {
   cd $MASTR_TOOL_DIR
   log_info "export csv files to $CSV_TARGET"
-  out="$(python3 export_mastr.py --force $CSV_TARGET)"
+  out="$(python3 export_mastr.py --force --concurrency $(nproc) $CSV_TARGET)"
   check_ret_val $? "error while exporting csv files from database" "$out"
 }
 
