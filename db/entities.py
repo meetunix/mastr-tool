@@ -93,6 +93,9 @@ class EinheitWind(Enum):
     Ort = (auto(), Type.TEXT, False, False, None)
     Laengengrad = (auto(), Type.NUMERIC, False, False, None)
     Breitengrad = (auto(), Type.NUMERIC, False, False, None)
+    UTM_zone = (auto(), Type.TEXT, False, False, None)
+    UTM_ost = (auto(), Type.NUMERIC, False, False, None)
+    UTM_nord = (auto(), Type.NUMERIC, False, False, None)
     Registrierungsdatum = (auto(), Type.DATE, False, False, None)
     GeplantesInbetriebnahmedatum = (auto(), Type.DATE, False, False, None)
     Inbetriebnahmedatum = (auto(), Type.DATE, False, False, None)
@@ -197,7 +200,7 @@ class EinheitSolar(Enum):
     EegMaStRNummer = (auto(), Type.TEXT, False, False, None)
 
 
-class EinheiteBiomasse(Enum):
+class EinheitenBiomasse(Enum):
     EinheitMastrNummer = (auto(), Type.TEXT, True, True)
     DatumLetzteAktualisierung = (auto(), Type.TIMESTAMP, True, False)
     LokationMaStRNummer = (auto(), Type.TEXT, False, False)
@@ -337,7 +340,7 @@ class Einheiten(Enum):
     EinheitenWasser = EinheitWasser
     EinheitenWind = EinheitWind
     EinheitenSolar = EinheitSolar
-    EinheitenBiomasse = EinheiteBiomasse
+    EinheitenBiomasse = EinheitenBiomasse
     AnlagenEegWind = AnlageEegWind
     Marktakteure = Marktakteur
     Katalogwerte = Katalogwert
@@ -351,7 +354,7 @@ class Indices(Enum):
     EinheitenWind = EinheitWind.Bundesland
     EinheitenSolar = EinheitSolar.Bundesland
     EinheitenWasser = EinheitWasser.Bundesland
-    EinheitenBiomasse = EinheiteBiomasse.Bundesland
+    EinheitenBiomasse = EinheitenBiomasse.Bundesland
 
 
 if __name__ == "__main__":
