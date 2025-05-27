@@ -197,7 +197,7 @@ class EinheitSolar(Enum):
     EegMaStRNummer = (auto(), Type.TEXT, False, False, None)
 
 
-class EinheiteBiomasse(Enum):
+class EinheitBiomasse(Enum):
     EinheitMastrNummer = (auto(), Type.TEXT, True, True)
     DatumLetzteAktualisierung = (auto(), Type.TIMESTAMP, True, False)
     LokationMaStRNummer = (auto(), Type.TEXT, False, False)
@@ -337,7 +337,7 @@ class Einheiten(Enum):
     EinheitenWasser = EinheitWasser
     EinheitenWind = EinheitWind
     EinheitenSolar = EinheitSolar
-    EinheitenBiomasse = EinheiteBiomasse
+    EinheitenBiomasse = EinheitBiomasse
     AnlagenEegWind = AnlageEegWind
     Marktakteure = Marktakteur
     Katalogwerte = Katalogwert
@@ -351,7 +351,7 @@ class Indices(Enum):
     EinheitenWind = EinheitWind.Bundesland
     EinheitenSolar = EinheitSolar.Bundesland
     EinheitenWasser = EinheitWasser.Bundesland
-    EinheitenBiomasse = EinheiteBiomasse.Bundesland
+    EinheitenBiomasse = EinheitBiomasse.Bundesland
 
 
 if __name__ == "__main__":
