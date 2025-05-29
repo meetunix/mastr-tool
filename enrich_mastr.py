@@ -41,6 +41,7 @@ class MastrEnricher:
         self._cache_path = cache_path
         self._cache_file = cache_path / Path(f"enricher_cache.pkl")
         self._cache = Cache.load(self._cache_file)
+        self._process_pool = Pool(processes=concurrency)
 
     @timer
     def enrich_utm_coordinates(self, table):
@@ -86,18 +87,16 @@ class MastrEnricher:
 
                 # calculate the non-cached coordinates in separate processes
                 processes = {}
-                with Pool(processes=self._concurrency) as pool:
-                    print("new pool")
-                    for row_id in need_calculation.keys():
-                        processes[row_id] = pool.apply_async(
-                            coord_converter.geo_to_utm,
-                            need_calculation[row_id],
-                        )
-                    # get calculated utm coordinates and prepare them for db write and store to cache
-                    for row_id in need_calculation.keys():
-                        utm = processes[row_id].get()
-                        updates.append((utm.zone, utm.easting, utm.northing, row_id))
-                        self._cache.set(need_calculation[row_id], utm)
+                for row_id in need_calculation.keys():
+                    processes[row_id] = self._process_pool.apply_async(
+                        coord_converter.geo_to_utm,
+                        need_calculation[row_id],
+                    )
+                # get calculated utm coordinates and prepare them for db write and store to cache
+                for row_id in need_calculation.keys():
+                    utm = processes[row_id].get()
+                    updates.append((utm.zone, utm.easting, utm.northing, row_id))
+                    self._cache.set(need_calculation[row_id], utm)
 
                 # Update the database with UTM coordinates
                 if updates:
@@ -125,6 +124,9 @@ class MastrEnricher:
         cursor.close()
         return processed_rows
 
+    def cleanup(self) -> None:
+        self._process_pool.close()
+
 
 @timer
 def main():
@@ -133,7 +135,7 @@ def main():
         "--concurrency",
         type=int,
         default=4,
-        help="Some compute intense calculations are calculated in max concurrency processes",
+        help="Some compute intense calculations are calculated with max concurrency processes",
     )
     parser.add_argument(
         "--cache-dir",
@@ -145,9 +147,10 @@ def main():
     connection = get_db_connection()
     enricher = MastrEnricher(connection, args.cache_dir, args.concurrency)
     print(f"Enriching UTM coordinates for Mastr tables in {args.concurrency} parallel processes")
-    for mastr_einheit in Einheiten:
+    for mastr_einheit in EinheitenGeoEnrichment:
         print(f"--- {mastr_einheit.name} ---")
         enricher.enrich_utm_coordinates(mastr_einheit.name)
+    enricher.cleanup()
 
 
 if __name__ == "__main__":

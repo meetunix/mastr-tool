@@ -43,7 +43,7 @@ class CoordinateConverter:
         return UTM(zone=zone_number, easting=easting, northing=northing)
 
 
-def geo_to_gauss_kruger(self, lat, lon) -> UTM:
+def geo_to_gauss_kruger(self, lat, lon) -> GaussKrueger:
     """Convert latitude/longitude to Gauss-Krüger (Potsdam) coordinates"""
     # Determine the meridian strip number (3° wide strips in Germany)
     meridian_strip = int((lon + 1.5) / 3)
