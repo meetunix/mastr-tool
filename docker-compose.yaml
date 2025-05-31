@@ -1,4 +1,14 @@
 services:
+  mastr-tool:
+    image: mastr-tool:latest
+    pull_policy: ""
+    restart: unless-stopped
+    environment:
+      plop: "plop"
+    volumes:
+      - /datenpool/Share/Marktstammdatenregister/:/mastr/cache/download
+      - mastr-tool-enricher-cache:/mastr/cache/enricher
+
   db:
     image: docker.io/postgres:16-bookworm
     restart: unless-stopped
@@ -12,3 +22,5 @@ services:
     ports:
       - "127.0.0.1:15432:5432"
 
+volumes:
+  mastr-tool-enricher-cache:

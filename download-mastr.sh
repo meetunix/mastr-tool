@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-MASTR_CACHE="/mnt/cache"
+MASTR_CACHE="/mastr/cache/download"
+MASTR_CACHE_ENRICHER="/mastr/cache/enricher"
 MASTR_DUMP_FILE="mastr-latest.zip"
 MASTR_DUMP="$MASTR_CACHE/$MASTR_DUMP_FILE"
 MASTR_TOOL_DIR="/opt/mastr-tool"
