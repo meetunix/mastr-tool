@@ -72,6 +72,13 @@ mastr_db_import() {
   check_ret_val $? "error while importing to database" "$out"
 }
 
+mastr_db_enrichment() {
+  cd $MASTR_TOOL_DIR
+  log_info "enrich data in database"
+  out="$(python3 enrich_mastr.py --concurrency $(nproc) --cache-dir $MASTR_CACHE_ENRICHER)"
+  check_ret_val $? "error while data enrichment" "$out"
+}
+
 mastr_csv_export() {
   cd $MASTR_TOOL_DIR
   log_info "export csv files to $CSV_TARGET"
@@ -84,6 +91,7 @@ mastr_import() {
   start=$(date +%s)
   mastr_download
   mastr_db_import
+  mastr_db_enrichment
   mastr_csv_export
   end=$(date +%s)
   log_info "import took $(($end/60 - $start/60)) minutes"
