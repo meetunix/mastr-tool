@@ -13,7 +13,7 @@ MASTR_DUMP_FILE="mastr-latest.zip"
 MASTR_DUMP="$MASTR_CACHE_DUMP/$MASTR_DUMP_FILE"
 
 SYSTEMD_ID="mastr-download"
-EXPORT_DIR="/var/www/mastr-tool/static/exports"
+EXPORT_DIR="/mastr/output"
 IMPORT_TIMESTAMP_FILE="$EXPORT_DIR/import_timestamp"
 DUMP_DATE_FILE="$EXPORT_DIR/dump_date"
 DUMP_DATE="undef"
@@ -23,6 +23,7 @@ REQUIRED_ENVS=(
   MASTR_DUMP
   SYSTEMD_ID
   EXPORT_DIR
+  MASTR_NOT_CHECK_UPDATES
 )
 
 
@@ -87,6 +88,7 @@ check_ret_val() {
 
 mastr_download() {
 
+  wait_random 10
   log_info "download new mastr-dump ($mastr_url)"
   out="$(curl --silent $mastr_url > $MASTR_DUMP)"
   check_ret_val $? "error while downloading $mastr_url" "$out"
@@ -104,24 +106,23 @@ mastr_download() {
 
 mastr_db_import() {
   log_info "import mastr-dump into database"
-  out="$($PYTHON import_mastr.py --silent --cleanup --concurrency $(nproc) $MASTR_CACHE_DUMP)"
-  check_ret_val $? "error while importing to database" "$out"
+  $PYTHON import_mastr.py --silent --cleanup --concurrency $(nproc) --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
+  check_ret_val $? "error while importing to database" ""
 }
 
 mastr_db_enrichment() {
   log_info "enrich data in database"
-  out="$($PYTHON enrich_mastr.py --concurrency $(nproc) --cache-dir $MASTR_CACHE_ENRICHER)"
-  check_ret_val $? "error while data enrichment" "$out"
+  $PYTHON enrich_mastr.py --concurrency $(nproc) --cache-dir $MASTR_CACHE_ENRICHER
+  check_ret_val $? "error while data enrichment" ""
 }
 
 mastr_csv_export() {
   log_info "export csv files to $EXPORT_DIR"
-  out="$($PYTHON export_mastr.py --force --concurrency $(nproc) $EXPORT_DIR)"
-  check_ret_val $? "error while exporting csv files from database" "$out"
+  $PYTHON export_mastr.py --force --concurrency $(nproc) $EXPORT_DIR
+  check_ret_val $? "error while exporting csv files from database" ""
 }
 
 mastr_import() {
-  wait_random 20
   start=$(date +%s)
   mastr_db_import
   mastr_db_enrichment
@@ -155,10 +156,20 @@ check_env_vars() {
 }
 
 create_directories() {
-  for dir in $MASTR_CACHE_DUMP $MASTR_CACHE_ENRICHER ; do create_directory $dir ;done
+  for dir in $MASTR_CACHE_DUMP $MASTR_CACHE_ENRICHER $EXPORT_DIR ; do
+    create_directory $dir
+  done
 }
 
 cd /mastr
+check_env_vars
+
+# use already existing dump
+if [[ $MASTR_NOT_CHECK_UPDATES =~ ^yes|true$ ]]; then
+  log_info "no check for newer MASTR dump, using existing dump"
+  mastr_import
+  exit
+fi
 
 # enforce download if no dump exists
 if [ ! -f $MASTR_DUMP ] ; then
@@ -177,10 +188,10 @@ ret_val=$?
 if [ $ret_val -eq 20 ] ; then
   log_info "MASTR source file has not been changed"
 elif [ $ret_val -eq 0 ] || [ $MASTR_FORCE =~ ^yes|true$ ]; then
-
   create_directories
-
-  if [ $ret_val -eq 0] mastr_download fi # only download if file remote file is newer than local one
+  if [ $ret_val -eq 0] ; then
+    mastr_download
+  fi # only download if file remote file is newer than local one
   mastr_import
   write_dump_date_file "$mastr_url"
 else

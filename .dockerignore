@@ -1,6 +1,7 @@
 *
 !db
 !enricher
+!utils
 !download-mastr.sh
 !enrich_mastr.py
 !export_mastr.py

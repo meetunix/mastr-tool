@@ -11,7 +11,7 @@ from decimal import Decimal
 from psycopg2.extras import execute_batch
 
 def get_db_connection():
-    return psycopg2.connect(dbname="mastr", user="mastr", password="password", host="127.0.0.1", port="15432")
+    return psycopg2.connect(dbname="mastr", user="mastr", password="password", host="db", port="5432")
 
 class DBConverter:
 

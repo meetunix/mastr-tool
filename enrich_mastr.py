@@ -11,13 +11,15 @@ from multiprocessing import Pool
 
 from enricher.enricher import CoordinateConverter, UTM
 
+from loguru import logger
+
 
 def timer(func):
     def helper_function(*args, **kwargs):
-        print(f"start {func.__name__}")
+        logger.info(f"start {func.__name__}")
         start = time.perf_counter()
         func(*args, **kwargs)
-        print(f"{func.__name__} took {time.perf_counter() - start:.3f} s")
+        logger.info(f"{func.__name__} took {time.perf_counter() - start:.3f} s")
 
     return helper_function
 
@@ -117,8 +119,7 @@ class MastrEnricher:
 
         except Exception as e:
             self.conn.rollback()
-            print(f"Error processing table {table}: {e}")
-            traceback.print_exc()
+            logger.exception(f"Error processing table {table}")
 
         self._cache.store(self._cache_file)
         cursor.close()
@@ -146,9 +147,9 @@ def main():
 
     connection = get_db_connection()
     enricher = MastrEnricher(connection, args.cache_dir, args.concurrency)
-    print(f"Enriching UTM coordinates for Mastr tables in {args.concurrency} parallel processes")
+    logger.info(f"Enriching UTM coordinates for Mastr tables in {args.concurrency} parallel processes")
     for mastr_einheit in EinheitenGeoEnrichment:
-        print(f"--- {mastr_einheit.name} ---")
+        logger.info(f"--- {mastr_einheit.name} ---")
         enricher.enrich_utm_coordinates(mastr_einheit.name)
     enricher.cleanup()
 

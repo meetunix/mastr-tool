@@ -26,7 +26,7 @@ def is_etag_new(local_etag_path: Path, mastr_url: str) -> bool:
     remote_etag = get_remote_etag(mastr_url)
     local_etag = get_local_etag(local_etag_path)
 
-    # print(f"{local_etag} <-> {remote_etag}")
+    #sys.stderr.write(f"{local_etag} <-> {remote_etag}\n")
 
     if remote_etag is None:
         return False
@@ -45,7 +45,6 @@ def is_etag_new(local_etag_path: Path, mastr_url: str) -> bool:
 def main() -> None:
     URL = "https://www.marktstammdatenregister.de/MaStR/Datendownload"
     page = requests.get(URL)
-    local_etag_path = Path("/mnt/cache/etag.txt")
     parser = argparse.ArgumentParser()
     parser.add_argument("--cache-dir", type=Path, required=True, help="Path to cache directory")
     args = parser.parse_args()
