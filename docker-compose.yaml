@@ -1,13 +1,13 @@
 services:
   mastr-tool:
     image: mastr-tool:latest
-    pull_policy: ""
+    pull_policy: "if_not_present"
     restart: unless-stopped
     environment:
       plop: "plop"
     volumes:
-      - /datenpool/Share/Marktstammdatenregister/:/mastr/cache/download
-      - mastr-tool-enricher-cache:/mastr/cache/enricher
+      - /datenpool/Share/Marktstammdatenregister/docker_cache:/mastr/cache
+      - /datenpool/Share/Marktstammdatenregister/docker_output:/mastr/output
 
   db:
     image: docker.io/postgres:16-bookworm
