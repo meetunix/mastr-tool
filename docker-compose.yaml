@@ -6,7 +6,7 @@ services:
     pull_policy: "if_not_present"
     restart: no
     environment:
-      MASTR_NOT_CHECK_UPDATES: "true"
+      MASTR_FORCE_USING_EXISTING_DUMP: "false" # use existing dump and do not download
     volumes:
       - ${MASTR_CACHE_DIR}:/mastr/cache
       - ${MASTR_OUTPUT_DIR}:/mastr/output

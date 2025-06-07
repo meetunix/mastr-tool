@@ -96,11 +96,11 @@ def main():
     path_udf = Path("db/udf.sql")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--concurrency", type=int, default=4, help="Number of parallel import processes (default: 4)")
-    parser.add_argument("--schema", action="store_true",
-                        help=f"Just create and write the schema to the cache directory.")
+    parser.add_argument(
+        "--schema", action="store_true", help=f"Just create and write the schema to the cache directory."
+    )
     parser.add_argument("--silent", action="store_true", help=f"no output on stdout")
-    parser.add_argument("--cleanup", action="store_true",
-                        help=f"delete tables first")
+    parser.add_argument("--cleanup", action="store_true", help=f"delete tables first")
     parser.add_argument("MSTR_DIR", type=Path, help="The export directory from the Marktstammdatenregister")
     parser.add_argument("--cache-dir", type=Path, help="Path to the cache director", required=True)
     args = parser.parse_args()
@@ -125,7 +125,12 @@ def main():
         processes = []
         for curr_entity in Einheiten:
             for file in entities_files[curr_entity.name]:
-                processes.append(pool.apply_async(parse_and_write_xml, (file, curr_entity, args.silent), ))
+                processes.append(
+                    pool.apply_async(
+                        parse_and_write_xml,
+                        (file, curr_entity, args.silent),
+                    )
+                )
 
         for proc in processes:
             proc.get()

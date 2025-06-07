@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 
 
 def get_remote_etag(url: str) -> Optional[str]:
-    headers = {'user-agent': 'mastr-tool'}
+    headers = {"user-agent": "mastr-tool"}
     try:
         r = requests.head(url, headers=headers)
         return r.headers["etag"]
@@ -26,7 +26,7 @@ def is_etag_new(local_etag_path: Path, mastr_url: str) -> bool:
     remote_etag = get_remote_etag(mastr_url)
     local_etag = get_local_etag(local_etag_path)
 
-    #sys.stderr.write(f"{local_etag} <-> {remote_etag}\n")
+    # sys.stderr.write(f"{local_etag} <-> {remote_etag}\n")
 
     if remote_etag is None:
         return False
@@ -63,5 +63,5 @@ def main() -> None:
         sys.exit(20)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

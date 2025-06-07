@@ -67,7 +67,7 @@ class MastrEnricher:
             )
 
             rows = cursor.fetchall()
-            #print(f"Fetched {len(rows)} rows in table {table} in {time.perf_counter() - start:.3f} s")
+            # print(f"Fetched {len(rows)} rows in table {table} in {time.perf_counter() - start:.3f} s")
 
             start = time.perf_counter()
             # Process in batches for better performance
@@ -114,10 +114,10 @@ class MastrEnricher:
                     )
 
                     processed_rows += len(updates)
-            #print(f"Processed {processed_rows} rows in table {table} in {time.perf_counter() - start:.3f} s")
+            # print(f"Processed {processed_rows} rows in table {table} in {time.perf_counter() - start:.3f} s")
 
             self.conn.commit()
-            #print(f"Processed {processed_rows} rows in table {table}")
+            # print(f"Processed {processed_rows} rows in table {table}")
 
         except Exception as e:
             self.conn.rollback()

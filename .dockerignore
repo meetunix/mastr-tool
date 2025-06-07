@@ -2,6 +2,7 @@
 !db
 !enricher
 !utils
+!scheduler.py
 !download-mastr.sh
 !enrich_mastr.py
 !export_mastr.py

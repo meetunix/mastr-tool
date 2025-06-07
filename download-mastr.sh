@@ -9,10 +9,9 @@ PYTHON="/mastr/.venv/bin/python3"
 MASTR_CACHE="/mastr/cache"
 MASTR_CACHE_ENRICHER="$MASTR_CACHE/enricher"
 MASTR_CACHE_DUMP="$MASTR_CACHE/dump"
-MASTR_DUMP_FILE="mastr-latest.zip"
-MASTR_DUMP="$MASTR_CACHE_DUMP/$MASTR_DUMP_FILE"
+MASTR_DUMP_FILE="$MASTR_CACHE/mastr-latest.zip"
 
-SYSTEMD_ID="mastr-entrypoint"
+SYSTEMD_ID="download-mastr.sh"
 EXPORT_DIR="/mastr/output"
 IMPORT_TIMESTAMP_FILE="$EXPORT_DIR/import_timestamp"
 DUMP_DATE_FILE="$EXPORT_DIR/dump_date"
@@ -20,10 +19,9 @@ DUMP_DATE="undef"
 
 REQUIRED_ENVS=(
   MASTR_CACHE
-  MASTR_DUMP
   SYSTEMD_ID
   EXPORT_DIR
-  MASTR_NOT_CHECK_UPDATES
+  MASTR_FORCE_USING_EXISTING_DUMP
 )
 
 
@@ -92,20 +90,27 @@ check_ret_val() {
 
 
 mastr_download() {
-
   wait_random 10
   log_info "download new mastr-dump ($mastr_url)"
-  out="$(curl --silent $mastr_url > $MASTR_DUMP)"
+  out="$(curl --silent $mastr_url > $MASTR_DUMP_FILE 2>&1)"
   check_ret_val $? "error while downloading $mastr_url" "$out"
 
-  cd $MASTR_CACHE
   log_info "erase old dump files"
-  out="$(rm -f mastr-dump/*)"
+  out="$(rm -f $MASTR_CACHE_DUMP/* 2>&1)"
   check_ret_val $? "error while erasing old dump files" "$out"
 
-  log_info "unzip dump $MASTR_DUMP_FILE"
-  out="$(unzip -qq $MASTR_DUMP_FILE -d mastr-dump/)"
-  check_ret_val $? "error while unzipping $MASTR_DUMP_FILE" "$out"
+}
+
+mastr_extract_dump(){
+
+  if [ -z "$(ls -A $MASTR_CACHE_DUMP)" ] ; then
+    log_info "unzip dump $MASTR_DUMP_FILE"
+    out="$(unzip -qq $MASTR_DUMP_FILE -d $MASTR_CACHE_DUMP/ 2>&1)"
+    check_ret_val $? "error while unzipping $MASTR_DUMP_FILE" "$out"
+  else
+    log_info "dump was not extracted, due to $MASTR_MASTR_CACHE_DUMP is not empty"
+  fi
+
 }
 
 
@@ -171,19 +176,20 @@ cd /mastr
 check_env_vars
 
 # use already existing dump
-if [[ $MASTR_NOT_CHECK_UPDATES =~ ^yes|true$ ]]; then
-  log_info "no check for newer MASTR dump, using existing dump"
+if [[ $MASTR_FORCE_USING_EXISTING_DUMP =~ ^yes|true$ ]]; then
+  log_info "no check for newer MASTR dump, using existing dump or fail if not existing"
+  mastr_extract_dump
   mastr_import
   exit
 fi
 
 # enforce download if no dump exists
-if [ ! -f $MASTR_DUMP ] ; then
+if [ ! -f $MASTR_DUMP_FILE ] ; then
   log_info "no local dump found, download current MASTR dump file"
   create_directories
   mastr_url="$($PYTHON get_mastr_url.py --cache-dir $MASTR_CACHE 2>&1)"
-  #echo $mastr_url
   mastr_download
+  mastr_extract_dump
   mastr_import
   write_dump_date_file "$mastr_url"
 fi
@@ -195,9 +201,10 @@ if [ $ret_val -eq 20 ] ; then
   log_info "MASTR source file has not been changed"
 elif [ $ret_val -eq 0 ] || [ $MASTR_FORCE =~ ^yes|true$ ]; then
   create_directories
-  if [ $ret_val -eq 0] ; then
+  if [ $ret_val -eq 0] ; then # only download if remote file is newer than local one
     mastr_download
-  fi # only download if file remote file is newer than local one
+  fi
+  mastr_extract_dump
   mastr_import
   write_dump_date_file "$mastr_url"
 else
