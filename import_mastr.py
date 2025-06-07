@@ -11,9 +11,9 @@ from typing import Dict, List, Set
 from db.entities import *
 from db.db_utils import DBElementWriter, get_db_connection
 
-from utils.mastr_logger import get_logger, LogLevel
+from utils.mastr_logger import get_mastr_logger, LogLevel
 
-logger = get_logger(LogLevel.INFO)
+logger = get_mastr_logger(LogLevel.INFO)
 
 FILE_PATTERN = re.compile(r"^(.*)_([0-9]{1,3}).xml$")
 

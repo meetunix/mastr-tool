@@ -12,7 +12,7 @@ MASTR_CACHE_DUMP="$MASTR_CACHE/dump"
 MASTR_DUMP_FILE="mastr-latest.zip"
 MASTR_DUMP="$MASTR_CACHE_DUMP/$MASTR_DUMP_FILE"
 
-SYSTEMD_ID="mastr-download"
+SYSTEMD_ID="mastr-entrypoint"
 EXPORT_DIR="/mastr/output"
 IMPORT_TIMESTAMP_FILE="$EXPORT_DIR/import_timestamp"
 DUMP_DATE_FILE="$EXPORT_DIR/dump_date"
@@ -63,11 +63,16 @@ create_directory() {
   fi
 }
 
+wait_time() {
+  log_info "wait $1 seconds before proceeding"
+  sleep $1
+}
+
 wait_random() {
   RAND_BACKUP=$(((RANDOM % $1 ) + 1))
-  log_info "wait $RAND_BACKUP seconds before proceeding"
-  sleep $RAND_BACKUP
+  wait_time $RAND_BACKUP
 }
+
 
 check_ret_val() {
 
@@ -106,7 +111,7 @@ mastr_download() {
 
 mastr_db_import() {
   log_info "import mastr-dump into database"
-  $PYTHON import_mastr.py --silent --cleanup --concurrency $(nproc) --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
+  $PYTHON import_mastr.py --cleanup --concurrency $(nproc) --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
   check_ret_val $? "error while importing to database" ""
 }
 
@@ -123,12 +128,13 @@ mastr_csv_export() {
 }
 
 mastr_import() {
+  wait_time 20 # wait for some db initialization tasks
   start=$(date +%s)
   mastr_db_import
   mastr_db_enrichment
   mastr_csv_export
   end=$(date +%s)
-  log_info "import took $(($end/60 - $start/60)) minutes"
+  log_info "import, enrichment and export took $(($end/60 - $start/60)) minutes"
 }
 
 write_dump_date_file() {

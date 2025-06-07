@@ -13,7 +13,9 @@ from pathlib import Path
 import pandas as pd
 import polars as pl
 
-from loguru import logger
+from utils.mastr_logger import get_mastr_logger, LogLevel
+
+logger = get_mastr_logger(LogLevel.INFO)
 
 
 def timer(func):
@@ -210,7 +212,7 @@ class MastrExporter:
             # until python 3.14 it is absolutely not recommended to use polars with multiprocessing
             # execute_jobs_in_parallel(self.concurrency, write_parquet_parallel, parquet_jobs)
             for job in parquet_jobs:
-                logger.info(f"\t{job.name}")
+                logger.debug(f"\t{job.name}")
                 write_parquet_parallel(job)
 
     def __copy_to(self, stmt: str, file_path: Path):
@@ -240,7 +242,9 @@ def write_excel_parallel(job: ConvertExportJob) -> None:
 
 
 def write_parquet_parallel(job: ConvertExportJob) -> None:
-    df = pl.scan_csv(job.csv_source_file, infer_schema_length=None, low_memory=True) # scan whole data first to infer schema
+    df = pl.scan_csv(
+        job.csv_source_file, infer_schema_length=None, low_memory=True
+    )  # scan whole data first to infer schema
     df.sink_parquet(job.file_output_path, compression="zstd")
 
 

@@ -11,7 +11,9 @@ from multiprocessing import Pool
 
 from enricher.enricher import CoordinateConverter, UTM
 
-from loguru import logger
+from utils.mastr_logger import get_mastr_logger, LogLevel
+
+logger = get_mastr_logger(LogLevel.INFO)
 
 
 def timer(func):

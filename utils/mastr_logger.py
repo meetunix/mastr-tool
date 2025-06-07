@@ -15,11 +15,11 @@ class LogLevel(enum.Enum):
     CRITICAL = "CRITICAL"
 
 
-def get_logger(level: LogLevel):
+def get_mastr_logger(level: LogLevel):
     logger.add(
         sys.stdout,
         level=level.value,
-        format="{time:YYYY-MM-DD at HH:mm:ss} | {level} | {message}",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {file} | {level} | {message}",
     )
     return logger
 

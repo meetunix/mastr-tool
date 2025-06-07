@@ -8,8 +8,8 @@ services:
     environment:
       MASTR_NOT_CHECK_UPDATES: "true"
     volumes:
-      - /datenpool/Share/Marktstammdatenregister/docker_cache:/mastr/cache
-      - /datenpool/Share/Marktstammdatenregister/docker_output:/mastr/output
+      - ${MASTR_CACHE_DIR}:/mastr/cache
+      - ${MASTR_OUTPUT_DIR}:/mastr/output
     depends_on:
       - db
 
@@ -22,7 +22,7 @@ services:
       - POSTGRES_DB=mastr
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
     volumes:
-      - ./postgres-data:/var/lib/postgresql/data
+      - mastr-database:/var/lib/postgresql/data
 
 volumes:
-  mastr-tool-enricher-cache:
+  mastr-database:
