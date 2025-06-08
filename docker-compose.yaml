@@ -1,9 +1,11 @@
 services:
+
   mastr-tool:
+    pull_policy: if_not_present
     image: mastr-tool:latest
     build: .
+    container_name: mastr-tool
     user: 1000:1000
-    pull_policy: "if_not_present"
     restart: no
     environment:
       MASTR_FORCE_USING_EXISTING_DUMP: "false" # use existing dump and do not download
@@ -13,9 +15,23 @@ services:
     depends_on:
       - db
 
+  mastr-static:
+    pull_policy: if_not_present
+    image: mastr-static:latest
+    build: httpd-static
+    container_name: mastr-static
+    restart: on-failure
+    volumes:
+      - ${MASTR_OUTPUT_DIR}:/var/www/mastr-output/:ro
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      - mastr-tool
+
   db:
     image: docker.io/postgres:16-bookworm
     restart: unless-stopped
+    container_name: mastr-db
     environment:
       - POSTGRES_USER=mastr
       - POSTGRES_PASSWORD=password
