@@ -1,7 +1,6 @@
+import pickle
 from pathlib import Path
 from threading import RLock
-import pickle
-import os
 from typing import Any, Union
 
 

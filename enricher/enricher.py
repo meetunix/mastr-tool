@@ -1,4 +1,3 @@
-import time
 from dataclasses import dataclass
 
 import pyproj
@@ -30,9 +29,7 @@ class CoordinateConverter:
         zone_number = int((lon + 180) / 6) + 1
 
         # Create the appropriate UTM projection
-        utm_crs = pyproj.CRS(
-            f"+proj=utm +zone={zone_number} +datum=WGS84 +units=m +no_defs"
-        )
+        utm_crs = pyproj.CRS(f"+proj=utm +zone={zone_number} +datum=WGS84 +units=m +no_defs")
 
         # Create transformer
         transformer = pyproj.Transformer.from_crs(self.wgs84, utm_crs, always_xy=True)

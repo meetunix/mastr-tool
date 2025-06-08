@@ -1,6 +1,5 @@
 import enum
 import sys
-from multiprocessing.util import get_logger
 
 from loguru import logger
 
@@ -22,4 +21,3 @@ def get_mastr_logger(level: LogLevel):
         format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {file} | {level} | {message}",
     )
     return logger
-
