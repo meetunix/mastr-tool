@@ -151,10 +151,10 @@ write_dump_date_file() {
     d=$(echo $date_stamp | cut -c 7-8)
 
     dump_date_stamp="$y-$m-$d"
-    log_info "write dump-timestamp ($dump_date_stamp) to %DUMP_DATE_FILE"
+    log_info "write dump-timestamp ($dump_date_stamp) to $DUMP_DATE_FILE"
     echo "$dump_date_stamp" > $DUMP_DATE_FILE
 
-    log_info "write import-timestamp (current time) to %IMPORT_TIMESTAMP_FILE"
+    log_info "write import-timestamp (current time) to $IMPORT_TIMESTAMP_FILE"
     date --iso-8601=minutes > $IMPORT_TIMESTAMP_FILE
   fi
 }
