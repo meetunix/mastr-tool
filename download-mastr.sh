@@ -2,7 +2,7 @@
 shopt -s nocasematch
 
 # MASTR_CACHE: Main cache directory, must be big and works best on filesystems with transparent compression
-# MASTR_FORCE: Force pipeline run without downloading dump
+# MASTR_FORCE_USING_EXISTING_DUMP: Force pipeline run without downloading dump
 
 PYTHON="/mastr/.venv/bin/python3"
 
@@ -12,7 +12,7 @@ MASTR_CACHE_DUMP="$MASTR_CACHE/dump"
 MASTR_DUMP_FILE="$MASTR_CACHE/mastr-latest.zip"
 
 SYSTEMD_ID="download-mastr.sh"
-EXPORT_DIR="/mastr/output"
+EXPORT_DIR="/mastr/output/export"
 IMPORT_TIMESTAMP_FILE="$EXPORT_DIR/import_timestamp"
 DUMP_DATE_FILE="$EXPORT_DIR/dump_date"
 DUMP_DATE="undef"
@@ -174,6 +174,7 @@ create_directories() {
 
 cd /mastr
 check_env_vars
+create_directories
 
 # use already existing dump
 if [[ $MASTR_FORCE_USING_EXISTING_DUMP =~ ^yes|true$ ]]; then
@@ -186,7 +187,6 @@ fi
 # enforce download if no dump exists
 if [ ! -f $MASTR_DUMP_FILE ] ; then
   log_info "no local dump found, download current MASTR dump file"
-  create_directories
   mastr_url="$($PYTHON get_mastr_url.py --cache-dir $MASTR_CACHE 2>&1)"
   mastr_download
   mastr_extract_dump
