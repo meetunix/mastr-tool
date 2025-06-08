@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
 from datetime import datetime, date
+from decimal import Decimal
+from typing import Union
+from xml.etree.ElementTree import Element
 
 import psycopg2
-
-from .entities import Einheiten, Type
-from xml.etree.ElementTree import Element
-from typing import Union
-from decimal import Decimal
-
 from psycopg2.extras import execute_batch
 
+from .entities import Einheiten, Type
+
+
 def get_db_connection():
-    return psycopg2.connect(dbname="mastr", user="mastr", password="password", host="127.0.0.1", port="15432")
+    return psycopg2.connect(dbname="mastr", user="mastr", password="password", host="db", port="5432")
+
 
 class DBConverter:
 
@@ -37,7 +38,7 @@ class DBConverter:
         elif Type.NUMERIC:
             return Decimal(value)
         else:
-            raise ValueError(f"Unable ro convert type \"{field_type}\" for value \"{value}\"")
+            raise ValueError(f'Unable ro convert type "{field_type}" for value "{value}"')
 
 
 class DBElementWriter:

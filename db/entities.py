@@ -355,13 +355,14 @@ class Einheiten(Enum):
     Katalogwerte = Katalogwert
     Katalogkategorien = Katalogkategorie
 
+
 class EinheitenGeoEnrichment(Enum):
     """Einheiten for geo coordinates enrichment"""
+
     EinheitenWasser = EinheitWasser
     EinheitenWind = EinheitWind
     EinheitenSolar = EinheitSolar
     EinheitenBiomasse = EinheitBiomasse
-
 
 
 # create additional indices

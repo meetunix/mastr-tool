@@ -13,13 +13,17 @@ from pathlib import Path
 import pandas as pd
 import polars as pl
 
+from utils.mastr_logger import get_mastr_logger, LogLevel
+
+logger = get_mastr_logger(LogLevel.INFO)
+
 
 def timer(func):
     def helper_function(*args, **kwargs):
-        print(f"start {func.__name__}")
+        logger.info(f"start {func.__name__}")
         start = time.perf_counter()
         func(*args, **kwargs)
-        print(f"{func.__name__} took {time.perf_counter() - start:.3f} s")
+        logger.info(f"{func.__name__} took {time.perf_counter() - start:.3f} s")
 
     return helper_function
 
@@ -208,7 +212,7 @@ class MastrExporter:
             # until python 3.14 it is absolutely not recommended to use polars with multiprocessing
             # execute_jobs_in_parallel(self.concurrency, write_parquet_parallel, parquet_jobs)
             for job in parquet_jobs:
-                print(f"\t{job.name}")
+                logger.debug(f"\t{job.name}")
                 write_parquet_parallel(job)
 
     def __copy_to(self, stmt: str, file_path: Path):
@@ -238,7 +242,9 @@ def write_excel_parallel(job: ConvertExportJob) -> None:
 
 
 def write_parquet_parallel(job: ConvertExportJob) -> None:
-    df = pl.scan_csv(job.csv_source_file, infer_schema_length=None, low_memory=True) # scan whole data first to infer schema
+    df = pl.scan_csv(
+        job.csv_source_file, infer_schema_length=None, low_memory=True
+    )  # scan whole data first to infer schema
     df.sink_parquet(job.file_output_path, compression="zstd")
 
 
@@ -263,7 +269,7 @@ def main():
     connection = get_db_connection()
     exporter = MastrExporter(connection, args.concurrency)
     for mastr_type in MastrType:
-        print(f"--- {mastr_type.name} ---")
+        logger.info(f"--- {mastr_type.name} ---")
         exporter.write_csv(mastr_type, args.OUTPUT, force=args.force)
         exporter.write_excel(mastr_type)
         exporter.write_parquet(mastr_type)

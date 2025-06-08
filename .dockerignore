@@ -1,0 +1,13 @@
+*
+!db
+!enricher
+!utils
+!scheduler.py
+!download-mastr.sh
+!enrich_mastr.py
+!export_mastr.py
+!get_mastr_url.py
+!import_mastr.py
+!pyproject.toml
+!uv.lock
+!LICENSE

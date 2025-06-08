@@ -3,7 +3,6 @@ import argparse
 import re
 import sys
 import time
-import traceback
 
 from multiprocessing import Pool
 from pathlib import Path
@@ -11,6 +10,10 @@ import xml.etree.ElementTree as ET
 from typing import Dict, List, Set
 from db.entities import *
 from db.db_utils import DBElementWriter, get_db_connection
+
+from utils.mastr_logger import get_mastr_logger, LogLevel
+
+logger = get_mastr_logger(LogLevel.INFO)
 
 FILE_PATTERN = re.compile(r"^(.*)_([0-9]{1,3}).xml$")
 
@@ -36,7 +39,7 @@ def get_files(files: Set[Path]) -> Dict[str, List[Path]]:
 
 def parse_and_write_xml(file: Path, entity: Einheiten, silent: bool) -> None:
     if not silent:
-        print(f"import file {file.name}")
+        logger.info(f"import file {file.name}")
     db_writer = DBElementWriter(entity, get_db_connection())
     for event, elem in ET.iterparse(file, events=("start", "end")):
         if event == "end" and elem.tag == entity.value.__name__:
@@ -64,7 +67,7 @@ def create_schema(path_schema: Path) -> None:
             i += f"CREATE INDEX IF NOT EXISTS {index.value.name}_idx ON {index.name}({index.value.name});\n\n"
         s += i
     except Exception as e:
-        traceback.print_exc()
+        logger.exception("Exception while creating schema")
         sys.stderr.write(f"\nERROR: {e} - {curr_column}\n")
         sys.exit(1)
 
@@ -90,17 +93,18 @@ def delete_tables() -> None:
 
 
 def main():
-    path_schema = Path("auto-schema.sql")
     path_udf = Path("db/udf.sql")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--concurrency", type=int, default=4, help="Number of parallel import processes (default: 4)")
-    parser.add_argument("--schema", action="store_true",
-                        help=f"Just create and write the schema to {path_schema} and exit.")
+    parser.add_argument(
+        "--schema", action="store_true", help=f"Just create and write the schema to the cache directory."
+    )
     parser.add_argument("--silent", action="store_true", help=f"no output on stdout")
-    parser.add_argument("--cleanup", action="store_true",
-                        help=f"delete tables first")
+    parser.add_argument("--cleanup", action="store_true", help=f"delete tables first")
     parser.add_argument("MSTR_DIR", type=Path, help="The export directory from the Marktstammdatenregister")
+    parser.add_argument("--cache-dir", type=Path, help="Path to the cache director", required=True)
     args = parser.parse_args()
+    path_schema = args.cache_dir / Path("./auto-schema.sql")
 
     if args.cleanup:
         delete_tables()
@@ -121,7 +125,12 @@ def main():
         processes = []
         for curr_entity in Einheiten:
             for file in entities_files[curr_entity.name]:
-                processes.append(pool.apply_async(parse_and_write_xml, (file, curr_entity, args.silent), ))
+                processes.append(
+                    pool.apply_async(
+                        parse_and_write_xml,
+                        (file, curr_entity, args.silent),
+                    )
+                )
 
         for proc in processes:
             proc.get()
@@ -130,4 +139,4 @@ def main():
 if __name__ == "__main__":
     start_perf = time.perf_counter()
     main()
-    sys.stdout.write(f"db import execution time: {time.perf_counter() - start_perf:9.3f} s\n")
+    logger.info(f"db import execution time: {time.perf_counter() - start_perf:9.3f} s")
