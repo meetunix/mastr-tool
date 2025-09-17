@@ -108,7 +108,7 @@ mastr_extract_dump(){
     out="$(unzip -qq $MASTR_DUMP_FILE -d $MASTR_CACHE_DUMP/ 2>&1)"
     check_ret_val $? "error while unzipping $MASTR_DUMP_FILE" "$out"
   else
-    log_info "dump was not extracted, due to $MASTR_MASTR_CACHE_DUMP is not empty"
+    log_info "dump is already extracted, due to $MASTR_MASTR_CACHE_DUMP is not empty"
   fi
 
 }
@@ -181,6 +181,7 @@ if [[ $MASTR_FORCE_USING_EXISTING_DUMP =~ ^yes|true$ ]]; then
   log_info "no check for newer MASTR dump, using existing dump or fail if not existing"
   mastr_extract_dump
   mastr_import
+  write_dump_date_file "$mastr_url"
   exit
 fi
 
@@ -201,7 +202,7 @@ if [ $ret_val -eq 20 ] ; then
   log_info "MASTR source file has not been changed"
 elif [ $ret_val -eq 0 ] || [ $MASTR_FORCE =~ ^yes|true$ ]; then
   create_directories
-  if [ $ret_val -eq 0] ; then # only download if remote file is newer than local one
+  if [ $ret_val -eq 0 ] ; then # only download if remote file is newer than local one
     mastr_download
   fi
   mastr_extract_dump
