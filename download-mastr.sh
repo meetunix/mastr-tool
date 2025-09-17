@@ -15,7 +15,6 @@ SYSTEMD_ID="download-mastr.sh"
 EXPORT_DIR="/mastr/output/export"
 IMPORT_TIMESTAMP_FILE="$EXPORT_DIR/import_timestamp"
 DUMP_DATE_FILE="$EXPORT_DIR/dump_date"
-DUMP_DATE="undef"
 
 REQUIRED_ENVS=(
   MASTR_CACHE
@@ -116,19 +115,19 @@ mastr_extract_dump(){
 
 mastr_db_import() {
   log_info "import mastr-dump into database"
-  $PYTHON import_mastr.py --cleanup --concurrency $(nproc) --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
+  $PYTHON import_mastr.py --cleanup --concurrency "$(nproc)" --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
   check_ret_val $? "error while importing to database" ""
 }
 
 mastr_db_enrichment() {
   log_info "enrich data in database"
-  $PYTHON enrich_mastr.py --concurrency $(nproc) --cache-dir $MASTR_CACHE_ENRICHER
+  $PYTHON enrich_mastr.py --concurrency "$(nproc)" --cache-dir $MASTR_CACHE_ENRICHER
   check_ret_val $? "error while data enrichment" ""
 }
 
 mastr_csv_export() {
   log_info "export csv files to $EXPORT_DIR"
-  $PYTHON export_mastr.py --force --concurrency $(nproc) $EXPORT_DIR
+  $PYTHON export_mastr.py --force --concurrency "$(nproc)" $EXPORT_DIR
   check_ret_val $? "error while exporting csv files from database" ""
 }
 
@@ -172,7 +171,7 @@ create_directories() {
   done
 }
 
-cd /mastr
+cd /mastr || exit 4
 check_env_vars
 create_directories
 
@@ -200,7 +199,7 @@ mastr_url="$($PYTHON get_mastr_url.py --cache-dir $MASTR_CACHE)"
 ret_val=$?
 if [ $ret_val -eq 20 ] ; then
   log_info "MASTR source file has not been changed"
-elif [ $ret_val -eq 0 ] || [ $MASTR_FORCE =~ ^yes|true$ ]; then
+elif [ $ret_val -eq 0 ] || [[ $MASTR_FORCE =~ ^yes|true$ ]]; then
   create_directories
   if [ $ret_val -eq 0 ] ; then # only download if remote file is newer than local one
     mastr_download
