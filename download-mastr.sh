@@ -202,7 +202,7 @@ if [ $ret_val -eq 20 ] ; then
   log_info "MASTR source file has not been changed"
 elif [ $ret_val -eq 0 ] || [ $MASTR_FORCE =~ ^yes|true$ ]; then
   create_directories
-  if [ $ret_val -eq 0] ; then # only download if remote file is newer than local one
+  if [ $ret_val -eq 0 ] ; then # only download if remote file is newer than local one
     mastr_download
   fi
   mastr_extract_dump
