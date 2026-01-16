@@ -16,7 +16,7 @@ def run_mastr_download():
 
         script_path = "/mastr/download-mastr.sh"
 
-        result = subprocess.run(["/bin/bash", script_path], cwd="/mastr", capture_output=False, text=True, timeout=3600)
+        result = subprocess.run(["/bin/bash", script_path], cwd="/mastr", capture_output=False, text=True, timeout=7200)
 
         if result.returncode == 0:
             logger.info("MASTR download script completed successfully")
@@ -28,7 +28,7 @@ def run_mastr_download():
                 logger.error(f"Error: {result.stderr}")
 
     except subprocess.TimeoutExpired:
-        logger.error("MASTR download script timed out after 1 hour")
+        logger.error("MASTR download script timed out after 2 hours")
     except Exception as e:
         logger.error(f"Error running MASTR download script: {e}")
 
