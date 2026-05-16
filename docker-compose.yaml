@@ -6,7 +6,6 @@ services:
     build: .
     container_name: mastr-tool
     user: 1000:1000
-    restart: no
     environment:
       MASTR_FORCE_USING_EXISTING_DUMP: "false" # use existing dump and do not download
     volumes:
@@ -20,7 +19,7 @@ services:
     image: mastr-static:latest
     build: httpd-static
     container_name: mastr-static
-    restart: on-failure
+    restart: unless-stopped
     volumes:
       - ${MASTR_OUTPUT_DIR}:/var/www/mastr-output/:ro
     ports:
@@ -46,7 +45,7 @@ services:
     image: mastr-app:latest
     build: ../mastr-app
     container_name: mastr-app
-    restart: on-failure
+    restart: unless-stopped
     environment:
       MASTR_STATIC_URL: http://mastr-static:8080
       MASTR_STATIC_PUBLIC_URL: ${MASTR_STATIC_PUBLIC_URL}
