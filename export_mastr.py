@@ -2,17 +2,17 @@
 import argparse
 import time
 from dataclasses import dataclass
-from multiprocessing import Pool
-from typing import Optional
-
-from db.db_utils import get_db_connection
-from db.entities import *
 from enum import Enum
+from multiprocessing import Pool
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import polars as pl
 
+from db.db_utils import get_db_connection
+from db.entities import *
+from db.polars_schema import build_polars_schema
 from utils.mastr_logger import get_mastr_logger, LogLevel
 
 logger = get_mastr_logger(LogLevel.INFO)
@@ -50,6 +50,7 @@ class CsvExportJob(ExportJob):
 @dataclass
 class ConvertExportJob(ExportJob):
     csv_source_file: Path
+    schema: Optional[dict[str, type[pl.DataType]]] = None
 
 
 @dataclass
@@ -203,10 +204,13 @@ class MastrExporter:
             if mastr_option.states:
                 csv_files += self.csv_files_states[type]
 
+            schema = build_polars_schema(mastr_option.entity)
             for csv_path in csv_files:
                 file_descr = ".".join(csv_path.name.split(".")[:-1])
                 parq_path = csv_path.parent / Path(file_descr + ".parq")
-                job = ConvertExportJob(name=file_descr, file_output_path=parq_path, csv_source_file=csv_path)
+                job = ConvertExportJob(
+                    name=file_descr, file_output_path=parq_path, csv_source_file=csv_path, schema=schema
+                )
                 parquet_jobs.append(job)
 
             # until python 3.14 it is absolutely not recommended to use polars with multiprocessing
@@ -242,9 +246,16 @@ def write_excel_parallel(job: ConvertExportJob) -> None:
 
 
 def write_parquet_parallel(job: ConvertExportJob) -> None:
+    # has_header=False + skip_rows=1: the CSV header contains duplicate column
+    # names (entity vs Marktakteur overlap), so we take column names from the
+    # supplied schema instead.
     df = pl.scan_csv(
-        job.csv_source_file, infer_schema_length=None, low_memory=True
-    )  # scan whole data first to infer schema
+        job.csv_source_file,
+        has_header=False,
+        skip_rows=1,
+        schema=job.schema,
+        try_parse_dates=True,
+    )
     df.sink_parquet(job.file_output_path, compression="zstd")
 
 

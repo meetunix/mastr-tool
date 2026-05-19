@@ -132,7 +132,7 @@ mastr_csv_export() {
 }
 
 mastr_import() {
-  wait_time 20 # wait for some db initialization tasks
+  wait_time 10 # wait for some db initialization tasks
   start=$(date +%s)
   mastr_db_import
   mastr_db_enrichment
@@ -176,7 +176,7 @@ check_env_vars
 create_directories
 
 # use already existing dump
-if [[ $MASTR_FORCE_USING_EXISTING_DUMP =~ ^yes|true$ ]]; then
+if [[ $MASTR_FORCE_USING_EXISTING_DUMP =~ ^(yes|true)$ ]]; then
   log_info "no check for newer MASTR dump, using existing dump or fail if not existing"
   mastr_extract_dump
   mastr_import

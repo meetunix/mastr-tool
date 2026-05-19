@@ -8,12 +8,13 @@ services:
     restart: unless-stopped
     user: 1000:1000
     environment:
-      MASTR_FORCE_USING_EXISTING_DUMP: "false" # use existing dump and do not download
+      MASTR_FORCE_USING_EXISTING_DUMP: "${MASTR_FORCE_USING_EXISTING_DUMP:-false}" # use existing dump and do not download
     volumes:
       - ${MASTR_CACHE_DIR}:/mastr/cache
       - ${MASTR_OUTPUT_DIR}:/mastr/output
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   mastr-static:
     pull_policy: if_not_present
@@ -29,7 +30,7 @@ services:
       - mastr-tool
 
   db:
-    image: docker.io/postgres:16-bookworm
+    image: docker.io/postgres:18-bookworm
     restart: unless-stopped
     container_name: mastr-db
     environment:
@@ -37,8 +38,28 @@ services:
       - POSTGRES_PASSWORD=password
       - POSTGRES_DB=mastr
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+      - PGDATA=/var/lib/postgresql/18/data
+    command: >
+      postgres
+      -c max_wal_size=4GB
+      -c min_wal_size=1GB
+      -c checkpoint_timeout=15min
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=64MB
+      -c wal_compression=on
+      -c shared_buffers=512MB
+      -c maintenance_work_mem=256MB
+      -c synchronous_commit=off
+      -c bgwriter_lru_maxpages=200
+      -c bgwriter_delay=50ms
     volumes:
-      - mastr-database:/var/lib/postgresql/data
+      - mastr-database:/var/lib/postgresql/18/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U mastr -d mastr" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # MaStR WebUI
   mastr-app:
