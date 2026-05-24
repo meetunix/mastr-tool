@@ -151,6 +151,6 @@ class Cache:
             cache._cache = data["cache"]
 
             return cache
-        except (IOError, pickle.PickleError, KeyError) as e:
-            print(f"Error loading cache: {e}")
-            return None
+        except (IOError, pickle.PickleError, KeyError, EOFError) as e:
+            print(f"Cache file {filepath} is empty or corrupted, starting with fresh cache: {e}")
+            return cls()
