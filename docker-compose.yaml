@@ -30,7 +30,7 @@ services:
       - mastr-tool
 
   db:
-    image: docker.io/postgres:18-bookworm
+    image: docker.io/postgres:18
     restart: unless-stopped
     container_name: mastr-db
     environment:
