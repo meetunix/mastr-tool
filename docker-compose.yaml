@@ -41,14 +41,11 @@ services:
       - PGDATA=/var/lib/postgresql/18/data
     command: >
       postgres
-      -c max_wal_size=4GB
-      -c min_wal_size=1GB
       -c checkpoint_timeout=15min
       -c checkpoint_completion_target=0.9
-      -c wal_buffers=64MB
+      -c wal_buffers=16MB
       -c wal_compression=on
-      -c shared_buffers=512MB
-      -c maintenance_work_mem=256MB
+      -c shared_buffers=256MB
       -c synchronous_commit=off
       -c bgwriter_lru_maxpages=200
       -c bgwriter_delay=50ms
