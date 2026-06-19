@@ -3,14 +3,13 @@ import argparse
 import re
 import sys
 import time
-
+import xml.etree.ElementTree as ET
 from multiprocessing import Pool
 from pathlib import Path
-import xml.etree.ElementTree as ET
 from typing import Dict, List, Set
-from db.entities import *
-from db.db_utils import DBElementWriter, get_db_connection
 
+from db.db_utils import DBElementWriter, get_db_connection
+from db.entities import *
 from utils.mastr_logger import get_mastr_logger, LogLevel
 
 logger = get_mastr_logger(LogLevel.INFO)
@@ -44,6 +43,7 @@ def parse_and_write_xml(file: Path, entity: Einheiten, silent: bool) -> None:
     for event, elem in ET.iterparse(file, events=("start", "end")):
         if event == "end" and elem.tag == entity.value.__name__:
             db_writer.write(elem)
+            elem.clear()  # Free memory held by this element
     db_writer.cleanup()
 
 
