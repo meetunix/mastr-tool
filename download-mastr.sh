@@ -115,19 +115,19 @@ mastr_extract_dump(){
 
 mastr_db_import() {
   log_info "import mastr-dump into database"
-  $PYTHON import_mastr.py --cleanup --concurrency "$(nproc)" --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
+  $PYTHON import_mastr.py --cleanup --concurrency "$(($(nproc) - 1))" --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
   check_ret_val $? "error while importing to database" ""
 }
 
 mastr_db_enrichment() {
   log_info "enrich data in database"
-  $PYTHON enrich_mastr.py --concurrency "$(nproc)" --cache-dir $MASTR_CACHE_ENRICHER
+  $PYTHON enrich_mastr.py --concurrency "$(($(nproc) - 1))" --cache-dir $MASTR_CACHE_ENRICHER
   check_ret_val $? "error while data enrichment" ""
 }
 
 mastr_csv_export() {
   log_info "export csv files to $EXPORT_DIR"
-  $PYTHON export_mastr.py --force --concurrency "$(nproc)" $EXPORT_DIR
+  $PYTHON export_mastr.py --force --concurrency "$(($(nproc) - 1))" $EXPORT_DIR
   check_ret_val $? "error while exporting csv files from database" ""
 }
 
