@@ -1,5 +1,6 @@
 #!/mastr/.venv/bin/python3
 
+import os
 import signal
 import subprocess
 import threading
@@ -33,24 +34,42 @@ def run_mastr_download():
         _is_running = True
     
     start_time = time.time()
-    result = None
     try:
         logger.info("Starting MASTR download script")
 
         script_path = "/mastr/download-mastr.sh"
 
-        # do not capture output - the executed scripts are logging
-        result = subprocess.run(["/bin/bash", script_path], cwd="/mastr", capture_output=False, text=True, timeout=7200)
-        duration = time.time() - start_time
+        # Create process in a new process group to kill all children on timeout
+        process = subprocess.Popen(
+            ["/bin/bash", script_path],
+            cwd="/mastr",
+            stdout=None,
+            stderr=None,
+            text=True,
+            preexec_fn=os.setsid  # Unix: create new process group
+        )
 
-
-        if result.returncode == 0:
-            logger.info(f"MASTR download script completed successfully in {duration:.2f}s")
-        else:
-            logger.error(f"MASTR download script failed with return code {result.returncode} after {duration:.2f}s")
-
-    except subprocess.TimeoutExpired:
-        logger.error("MASTR download script timed out after 2 hours")
+        # Wait with timeout
+        try:
+            process.communicate(timeout=7200)
+            duration = time.time() - start_time
+            if process.returncode == 0:
+                logger.info(f"MASTR download script completed successfully in {duration:.2f}s")
+            else:
+                logger.error(f"MASTR download script failed with return code {process.returncode} after {duration:.2f}s")
+        except subprocess.TimeoutExpired:
+            # Kill the entire process group (parent + all children)
+            try:
+                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                process.wait(timeout=30)
+            except (ProcessLookupError, subprocess.TimeoutExpired):
+                # Process already dead or still hanging; force kill
+                try:
+                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                    process.wait(timeout=10)
+                except ProcessLookupError:
+                    pass
+            logger.error("MASTR download script timed out after 2 hours")
     except Exception as e:
         logger.error(f"Error running MASTR download script: {e}")
     finally:
