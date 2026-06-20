@@ -2,12 +2,10 @@
 import argparse
 import time
 from dataclasses import dataclass
-from enum import Enum
 from multiprocessing import Pool
 from pathlib import Path
 from typing import Optional
 
-import pandas as pd
 import polars as pl
 
 from db.db_utils import get_db_connection
@@ -190,7 +188,10 @@ class MastrExporter:
                 job = ConvertExportJob(name=file_descr, file_output_path=excel_path, csv_source_file=csv_path)
                 excel_jobs.append(job)
 
-            execute_jobs_in_parallel(self.concurrency, write_excel_parallel, excel_jobs)
+            # Reduce concurrency for Excel to avoid memory issues
+            # Use half the threads, but minimum 1
+            excel_concurrency = max(1, self.concurrency // 2)
+            execute_jobs_in_parallel(excel_concurrency, write_excel_parallel, excel_jobs)
 
     @timer
     def write_parquet(self, type: MastrType) -> None:
@@ -241,8 +242,18 @@ def write_csv_parallel(job: CsvExportJob) -> None:
 
 
 def write_excel_parallel(job: ConvertExportJob) -> None:
-    df = pd.read_csv(job.csv_source_file, low_memory=False)
-    df.to_excel(job.file_output_path, index=False, sheet_name=job.name)
+    import csv
+    from openpyxl import Workbook
+    
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet(job.name)
+    
+    with open(job.csv_source_file, 'r', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            ws.append(row)
+    
+    wb.save(job.file_output_path)
 
 
 def write_parquet_parallel(job: ConvertExportJob) -> None:
