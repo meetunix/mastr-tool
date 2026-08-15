@@ -138,7 +138,7 @@ mastr_import() {
   mastr_db_enrichment
   mastr_csv_export
   end=$(date +%s)
-  log_info "import, enrichment and export took $(($end/60 - $start/60)) minutes"
+  log_info "import, enrichment and export took $(( (end - start) / 60 )) minutes"
 }
 
 write_dump_date_file() {
@@ -177,7 +177,12 @@ create_directories
 
 # use already existing dump
 if [[ $MASTR_FORCE_USING_EXISTING_DUMP =~ ^(yes|true)$ ]]; then
-  log_info "no check for newer MASTR dump, using existing dump or fail if not existing"
+  log_info "no check for newer MASTR dump, using existing dump or downloading if not existing"
+  mastr_url="$($PYTHON get_mastr_url.py --cache-dir $MASTR_CACHE 2>&1)"
+  if [ ! -f $MASTR_DUMP_FILE ] ; then
+    log_info "local dump not found, downloading current MASTR dump file"
+    mastr_download
+  fi
   mastr_extract_dump
   mastr_import
   write_dump_date_file "$mastr_url"
@@ -192,6 +197,7 @@ if [ ! -f $MASTR_DUMP_FILE ] ; then
   mastr_extract_dump
   mastr_import
   write_dump_date_file "$mastr_url"
+  exit
 fi
 
 # only download and run pipeline, if remote file is newer than local one (using etag)

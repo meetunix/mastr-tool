@@ -19,23 +19,20 @@ class DBConverter:
     @staticmethod
     def convert(value: str, field_type: Type) -> Union[Decimal, int, float, str, datetime, date, None]:
 
-        if value is None:
-            return None
-
         if value is None or value.lower() == "none":
             return None
 
-        if Type.TEXT:
+        if field_type == Type.TEXT:
             return value
-        elif Type.INT:
+        elif field_type == Type.INT:
             return int(value)
-        elif Type.BOOLEAN:
+        elif field_type == Type.BOOLEAN:
             return value.lower().startswith(("true", "yes", "ja"))
-        elif Type.TIMESTAMP:
+        elif field_type == Type.TIMESTAMP:
             return datetime.fromisoformat(value)
-        elif Type.DATE:
+        elif field_type == Type.DATE:
             return datetime.fromisoformat(value).date()
-        elif Type.NUMERIC:
+        elif field_type == Type.NUMERIC:
             return Decimal(value)
         else:
             raise ValueError(f'Unable ro convert type "{field_type}" for value "{value}"')

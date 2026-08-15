@@ -187,7 +187,6 @@ class EinheitSolar(Enum):
     Einspeisungsart = (auto(), Type.INT, False, False, SelectUDFs.Katalog)
     GenMastrNummer = (auto(), Type.TEXT, False, False, None)
     EinheitSystemstatus = (auto(), Type.INT, False, False, SelectUDFs.Katalog)
-    Energieträger = (auto(), Type.INT, False, False, SelectUDFs.Energietraeger)
     AnschlussAnHoechstOderHochSpannung = (auto(), Type.BOOLEAN, False, False, SelectUDFs.Boolean)
     zugeordneteWirkleistungWechselrichter = (auto(), Type.NUMERIC, False, False, None)
     AnzahlModule = (auto(), Type.INT, False, False, None)

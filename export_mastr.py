@@ -82,8 +82,9 @@ class MastrExporter:
         for column in Marktakteur:
             column_name = f"{table_name}.{column.name}"
             col_opts = column.value
-            if col_opts[4]:
-                udf: str = col_opts[4].value
+            udf = col_opts[4] if len(col_opts) > 4 else None
+            if udf:
+                udf: str = udf.value
                 udf = udf.replace("{{field}}", column_name)
                 columns += f"\t{udf} {column.name},\n"
             else:
@@ -101,8 +102,9 @@ class MastrExporter:
             for column in main_table:
                 column_name = f"{table_name}.{column.name}"
                 col_opts = column.value
-                if col_opts[4]:
-                    udf: str = col_opts[4].value
+                udf = col_opts[4] if len(col_opts) > 4 else None
+                if udf:
+                    udf: str = udf.value
                     udf = udf.replace("{{field}}", column_name)
                     columns += f"\t{udf} {column.name},\n"
                 else:
@@ -227,7 +229,7 @@ class MastrExporter:
 
     def __query_db(self, stmt: str, params: tuple = (), returnable=True) -> tuple:
         with self.conn.cursor() as cursor:
-            cursor.execute(stmt, (tuple,))
+            cursor.execute(stmt, params)
             return cursor.fetchall() if returnable else ()
 
 

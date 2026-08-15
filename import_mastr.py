@@ -124,7 +124,11 @@ def main():
     with Pool(processes=args.concurrency) as pool:
         processes = []
         for curr_entity in Einheiten:
-            for file in entities_files[curr_entity.name]:
+            entity_files = entities_files.get(curr_entity.name, [])
+            if not entity_files:
+                logger.warning(f"no source files found for entity {curr_entity.name}, skipping")
+                continue
+            for file in entity_files:
                 processes.append(
                     pool.apply_async(
                         parse_and_write_xml,

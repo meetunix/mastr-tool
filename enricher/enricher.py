@@ -39,25 +39,24 @@ class CoordinateConverter:
 
         return UTM(zone=zone_number, easting=easting, northing=northing)
 
+    def geo_to_gauss_kruger(self, lat, lon) -> GaussKrueger:
+        """Convert latitude/longitude to Gauss-Krüger (Potsdam) coordinates"""
+        # Determine the meridian strip number (3° wide strips in Germany)
+        meridian_strip = int((lon + 1.5) / 3)
+        central_meridian = meridian_strip * 3
 
-def geo_to_gauss_kruger(self, lat, lon) -> GaussKrueger:
-    """Convert latitude/longitude to Gauss-Krüger (Potsdam) coordinates"""
-    # Determine the meridian strip number (3° wide strips in Germany)
-    meridian_strip = int((lon + 1.5) / 3)
-    central_meridian = meridian_strip * 3
+        # Create Gauss-Krüger projection with Potsdam datum, but without explicit transformation parameters
+        gk_crs = pyproj.CRS(
+            f"+proj=tmerc +lat_0=0 +lon_0={central_meridian} +k=1 +x_0={meridian_strip * 1000000 + 500000} +y_0=0 +ellps=bessel +units=m"
+        )
 
-    # Create Gauss-Krüger projection with Potsdam datum, but without explicit transformation parameters
-    gk_crs = pyproj.CRS(
-        f"+proj=tmerc +lat_0=0 +lon_0={central_meridian} +k=1 +x_0={meridian_strip * 1000000 + 500000} +y_0=0 +ellps=bessel +units=m"
-    )
+        # Create transformer
+        transformer = pyproj.Transformer.from_crs(self.wgs84, gk_crs, always_xy=True)
 
-    # Create transformer
-    transformer = pyproj.Transformer.from_crs(self.wgs84, gk_crs, always_xy=True)
+        # Transform coordinates
+        r_value, h_value = transformer.transform(lon, lat)
 
-    # Transform coordinates
-    r_value, h_value = transformer.transform(lon, lat)
-
-    return GaussKrueger(strip=meridian_strip, easting=r_value, northing=h_value)
+        return GaussKrueger(strip=meridian_strip, easting=r_value, northing=h_value)
 
 
 if __name__ == "__main__":

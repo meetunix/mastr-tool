@@ -117,13 +117,15 @@ class MastrEnricher:
             # print(f"Processed {processed_rows} rows in table {table} in {time.perf_counter() - start:.3f} s")
 
             self.conn.commit()
+            # Only persist the cache after the DB commit succeeded, so that
+            # rolled-back batches do not leave the cache and DB out of sync.
+            self._cache.store(self._cache_file)
             # print(f"Processed {processed_rows} rows in table {table}")
 
         except Exception as e:
             self.conn.rollback()
             logger.exception(f"Error processing table {table}")
 
-        self._cache.store(self._cache_file)
         cursor.close()
         return processed_rows
 
