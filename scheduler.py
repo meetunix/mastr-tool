@@ -76,11 +76,22 @@ def run_mastr_download():
         _is_running = False
 
 
+def _force_using_existing_dump():
+    """Return True if MASTR_FORCE_USING_EXISTING_DUMP is enabled."""
+    return os.environ.get("MASTR_FORCE_USING_EXISTING_DUMP", "").lower() in ("yes", "true")
+
+
 def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
     logger.info("Starting MASTR scheduler")
+
+    if _force_using_existing_dump():
+        logger.info("MASTR_FORCE_USING_EXISTING_DUMP is set, running pipeline once without scheduling")
+        run_mastr_download()
+        logger.info("Pipeline run complete, exiting (no recurring schedule)")
+        return
 
     schedule.every(30).minutes.do(run_mastr_download)
 
@@ -91,7 +102,7 @@ def main():
     while not _shutdown:
         schedule.run_pending()
         time.sleep(1)
-    
+
     logger.info("Scheduler shutdown complete")
 
 

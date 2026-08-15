@@ -205,11 +205,9 @@ mastr_url="$($PYTHON get_mastr_url.py --cache-dir $MASTR_CACHE)"
 ret_val=$?
 if [ $ret_val -eq 20 ] ; then
   log_info "MASTR source file has not been changed"
-elif [ $ret_val -eq 0 ] || [[ $MASTR_FORCE =~ ^yes|true$ ]]; then
+elif [ $ret_val -eq 0 ] ; then
   create_directories
-  if [ $ret_val -eq 0 ] ; then # only download if remote file is newer than local one
-    mastr_download
-  fi
+  mastr_download
   mastr_extract_dump
   mastr_import
   write_dump_date_file "$mastr_url"
