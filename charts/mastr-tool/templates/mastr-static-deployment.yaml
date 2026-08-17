@@ -1,0 +1,73 @@
+{{- if .Values.mastrStatic.enabled }}
+{{- $fullname := include "mastr-tool.fullname" . -}}
+{{- $ms := .Values.mastrStatic -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-static
+  labels:
+    {{- include "mastr-tool.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mastr-static
+spec:
+  type: {{ $ms.service.type }}
+  ports:
+    - name: http
+      port: {{ $ms.service.port }}
+      targetPort: {{ $ms.containerPort }}
+  selector:
+    app.kubernetes.io/name: {{ include "mastr-tool.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: mastr-static
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-static
+  labels:
+    {{- include "mastr-tool.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mastr-static
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "mastr-tool.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: mastr-static
+  template:
+    metadata:
+      labels:
+        {{- include "mastr-tool.labels" . | nindent 8 }}
+        app.kubernetes.io/component: mastr-static
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $ms.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $ms.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $ms.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mastr-static
+          image: "{{ $ms.image.repository }}:{{ $ms.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ $ms.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ $ms.containerPort }}
+          volumeMounts:
+            - name: output
+              mountPath: /var/www/mastr-output/
+              readOnly: true
+          {{- with $ms.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: output
+          persistentVolumeClaim:
+            claimName: {{ $fullname }}-output
+{{- end }}

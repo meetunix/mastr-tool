@@ -1,0 +1,133 @@
+{{/*
+Standalone Postgres StatefulSet + Service + headless Service.
+Only rendered when database.mode=standalone.
+*/}}
+{{- if eq .Values.database.mode "standalone" }}
+{{- $fullname := include "mastr-tool.fullname" . -}}
+{{- $db := .Values.database.standalone -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullname }}-db
+  labels:
+    {{- include "mastr-tool.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: {{ .Values.database.port | default 5432 }}
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: {{ include "mastr-tool.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: database
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $fullname }}-db
+  labels:
+    {{- include "mastr-tool.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  serviceName: {{ $fullname }}-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "mastr-tool.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        {{- include "mastr-tool.labels" . | nindent 8 }}
+        app.kubernetes.io/component: database
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $db.affinity }}
+      affinity: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $db.nodeSelector }}
+      nodeSelector: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $db.tolerations }}
+      tolerations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: postgres
+          image: "{{ $db.image.repository }}:{{ $db.image.tag }}"
+          imagePullPolicy: {{ $db.image.pullPolicy }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ $db.user | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mastr-tool.dbSecretName" . }}
+                  key: password
+            - name: POSTGRES_DB
+              value: {{ $db.name | quote }}
+            - name: POSTGRES_INITDB_ARGS
+              value: {{ $db.initdbArgs | quote }}
+            - name: PGDATA
+              value: {{ $db.pgdata | quote }}
+          # Mirrors the `command:` block in docker-compose.yaml.
+          command:
+            - postgres
+            - -c
+            - max_wal_size={{ $db.postgresqlParams.max_wal_size }}
+            - -c
+            - checkpoint_timeout={{ $db.postgresqlParams.checkpoint_timeout }}
+            - -c
+            - checkpoint_completion_target={{ $db.postgresqlParams.checkpoint_completion_target }}
+            - -c
+            - wal_buffers={{ $db.postgresqlParams.wal_buffers }}
+            - -c
+            - wal_compression={{ $db.postgresqlParams.wal_compression }}
+            - -c
+            - shared_buffers={{ $db.postgresqlParams.shared_buffers }}
+            - -c
+            - synchronous_commit={{ $db.postgresqlParams.synchronous_commit }}
+            - -c
+            - bgwriter_lru_maxpages={{ $db.postgresqlParams.bgwriter_lru_maxpages }}
+            - -c
+            - bgwriter_delay={{ $db.postgresqlParams.bgwriter_delay }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/18/data
+          # Mirrors the compose healthcheck.
+          livenessProbe:
+            exec:
+              command: ["CMD-SHELL", "pg_isready -U {{ $db.user }} -d {{ $db.name }}"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command: ["CMD-SHELL", "pg_isready -U {{ $db.user }} -d {{ $db.name }}"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          {{- with $db.resources }}
+          resources: {{ toYaml . | nindent 12 }}
+          {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          {{- include "mastr-tool.labels" . | nindent 10 }}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: {{ $db.storage | quote }}
+        {{- with $db.storageClassName }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+{{- end }}

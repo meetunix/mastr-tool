@@ -1,0 +1,35 @@
+{{- if .Values.persistence.cache.enabled | default true }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mastr-tool.fullname" . }}-cache
+  labels:
+    {{- include "mastr-tool.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.cache.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.cache.size | quote }}
+  {{- with .Values.persistence.cache.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.persistence.output.enabled | default true }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "mastr-tool.fullname" . }}-output
+  labels:
+    {{- include "mastr-tool.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.output.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.output.size | quote }}
+  {{- with .Values.persistence.output.storageClassName }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+{{- end }}

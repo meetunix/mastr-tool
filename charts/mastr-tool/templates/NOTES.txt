@@ -1,0 +1,28 @@
+mastr-tool chart installed as release "{{ .Release.Name }}".
+
+Database mode: {{ .Values.database.mode }}
+{{- if eq .Values.database.mode "standalone" }}
+
+Postgres is deployed as a StatefulSet ({{ include "mastr-tool.fullname" . }}-db).
+The mastr-tool pod waits for DB readiness via an initContainer.
+{{- else if eq .Values.database.mode "cnpg" }}
+
+Using an existing CloudNativePG Cluster.
+  DB host: {{ .Values.database.host | default "<not set>" }}
+Make sure the CNPG Cluster is running and the Secret referenced by
+  database.existingSecret (or the chart-created Secret) contains the
+  `app` user credentials for that Cluster.
+{{- end }}
+
+Services:
+{{- if .Values.mastrStatic.enabled }}
+  mastr-static:  http://{{ include "mastr-tool.fullname" . }}-static:{{ .Values.mastrStatic.service.port }}  (exported files)
+{{- end }}
+
+Next steps:
+  - Check pod status:  kubectl --namespace {{ .Release.Namespace }} get pods
+  - Tail the pipeline: kubectl --namespace {{ .Release.Namespace }} logs -f deployment/{{ include "mastr-tool.fullname" . }}
+{{- if eq .Values.database.mode "standalone" }}
+  - The first import of the full MaStR dump takes a long time and needs
+    >= 70 GiB on the cache PVC. Verify storage before triggering a full run.
+{{- end }}

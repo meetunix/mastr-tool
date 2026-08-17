@@ -1,0 +1,41 @@
+{{- if .Values.mastrStatic.enabled }}
+{{- if .Values.mastrStatic.ingress.enabled }}
+{{- $fullname := include "mastr-tool.fullname" . -}}
+{{- $ms := .Values.mastrStatic -}}
+{{- $svcPort := $ms.service.port -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}-static
+  labels:
+    {{- include "mastr-tool.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mastr-static
+  {{- with $ms.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $ms.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with $ms.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $ms.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path | quote }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $fullname }}-static
+                port:
+                  number: {{ $svcPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,129 @@
+# mastr-tool Helm chart values
+#
+# Mirrors docker-compose.yaml: mastr-tool + mastr-static + db.
+# (mastr-app is a separate repository and gets its own chart.)
+# All images are pulled from Docker Hub (nachtsieb/mastr-*).
+
+# --- global image / naming ---
+nameOverride: ""
+fullnameOverride: ""
+
+imagePullSecrets: []
+
+# --- mastr-tool (backend scheduler: download -> import -> enrich -> export) ---
+mastrTool:
+  image:
+    repository: nachtsieb/mastr-tool
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Run as non-root (matches compose `user: 1000:1000`).
+  podSecurityContext:
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  # Force using an existing dump instead of downloading (one-shot pipeline run).
+  forceUsingExistingDump: false
+  # Extra env vars appended to the container.
+  extraEnv: []
+  resources: {}
+    # requests: { cpu: "1", memory: "2Gi" }
+    # limits:   { cpu: "2", memory: "4Gi" }
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# --- mastr-static (httpd serving the exported files) ---
+mastrStatic:
+  enabled: true
+  image:
+    repository: nachtsieb/mastr-static
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Port the container listens on (httpd configured to 8080).
+  containerPort: 8080
+  service:
+    type: ClusterIP
+    port: 8080
+  # Ingress exposing the exported files. Set enabled: true and configure host/path.
+  ingress:
+    enabled: false
+    className: ""                 # e.g. nginx, traefik
+    annotations: {}
+    hosts:
+      - host: mastr-static.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+      # - secretName: mastr-static-tls
+      #   hosts: [mastr-static.local]
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# --- database ---
+# mode controls how the chart provisions / addresses Postgres:
+#   standalone : chart deploys its own Postgres StatefulSet (mirrors compose `db`).
+#   cnpg       : chart deploys NO db pod; point at an existing CloudNativePG Cluster
+#                via database.host (the -rw service) and database.user/secret.
+database:
+  mode: standalone
+  port: 5432
+  # Used by cnpg mode (ignored for standalone).
+  host: ""
+  name: mastr
+  user: mastr
+  password: ""
+  # Name of an existing Secret with keys `username` and `password`.
+  # If set, the chart will NOT create its own Secret and will use this one.
+  existingSecret: ""
+  # Key names inside the Secret (defaults match common conventions).
+  existingSecretUserKey: username
+  existingSecretPasswordKey: password
+
+  # standalone-mode Postgres.
+  standalone:
+    image:
+      repository: postgres
+      tag: "18"
+      pullPolicy: IfNotPresent
+    user: mastr
+    password: password
+    name: mastr
+    # initdb locale args (mirrors compose POSTGRES_INITDB_ARGS).
+    initdbArgs: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    pgdata: /var/lib/postgresql/18/data
+    storage: 50Gi
+    storageClassName: ""
+    # Postgres tuning flags (mirrors the `command:` block in compose).
+    postgresqlParams:
+      max_wal_size: 2GB
+      checkpoint_timeout: 15min
+      checkpoint_completion_target: "0.9"
+      wal_buffers: 16MB
+      wal_compression: "on"
+      shared_buffers: 256MB
+      synchronous_commit: "off"
+      bgwriter_lru_maxpages: "200"
+      bgwriter_delay: 50ms
+    resources: {}
+      # requests: { cpu: "500m", memory: "1Gi" }
+    nodeSelector: {}
+    tolerations: []
+    affinity: {}
+
+# --- persistence for cache + output (shared by mastr-tool and mastr-static) ---
+persistence:
+  # MASTR_CACHE_DIR: dump, extracted XML, enricher cache. Needs >= 70 GiB per README.
+  cache:
+    size: 80Gi
+    storageClassName: ""
+    accessModes: [ReadWriteOnce]
+  # MASTR_OUTPUT_DIR: CSV / Parquet / Excel exports.
+  output:
+    size: 20Gi
+    storageClassName: ""
+    # ReadWriteMany recommended so mastr-static can read exports written by mastr-tool
+    # when they land on different nodes. With ReadWriteOnce, co-locate via affinity.
+    accessModes: [ReadWriteMany]

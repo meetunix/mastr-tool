@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Union
@@ -11,7 +12,13 @@ from .entities import Einheiten, Type
 
 
 def get_db_connection():
-    return psycopg2.connect(dbname="mastr", user="mastr", password="password", host="db", port="5432")
+    return psycopg2.connect(
+        host=os.environ.get("DB_HOST", "db"),
+        port=os.environ.get("DB_PORT", "5432"),
+        dbname=os.environ.get("DB_NAME", "mastr"),
+        user=os.environ.get("DB_USER", "mastr"),
+        password=os.environ.get("DB_PASSWORD", "password"),
+    )
 
 
 class DBConverter:

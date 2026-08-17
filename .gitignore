@@ -167,3 +167,5 @@ cython_debug/
 postgres-data
 auto-schema.sql
 etag.txt
+
+my-values.yaml

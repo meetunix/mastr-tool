@@ -1,0 +1,9 @@
+apiVersion: v2
+name: mastr-tool
+description: Helm chart for mastr-tool - download, import, enrich and export of the Marktstammdatenregister (MaStR) data.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+home: https://codeberg.org/nachtsieb/mastr-tool
+maintainers:
+  - name: nachtsieb

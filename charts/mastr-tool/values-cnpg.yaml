@@ -1,0 +1,50 @@
+# Example: deploy mastr-tool against an existing CloudNativePG Cluster.
+#
+# Prerequisites:
+#   1. CNPG operator installed in the cluster.
+#   2. A Cluster resource exists, e.g.:
+#
+#        apiVersion: postgresql.cnpg.io/v1
+#        kind: Cluster
+#        metadata:
+#          name: mastr-db
+#          namespace: mastr
+#        spec:
+#          instances: 3
+#          imageName: ghcr.io/cloudnative-pg/postgresql:18
+#          storage:
+#            size: 50Gi
+#          managed:
+#            roles:
+#              - name: mastr
+#                superuser: false
+#                createdb: false
+#                createrole: false
+#                login: true
+#          backup:
+#            barmanObjectStore:
+#              destinationPath: s3://my-bucket/mastr
+#              ...
+#
+#   CNPG auto-creates:
+#     - Service:  mastr-db-rw   (read/write, use as DB_HOST)
+#     - Secret:    mastr-db-app  (keys: username, password)
+#
+# Install:
+#   helm install mastr ./charts/mastr-tool -n mastr -f values-cnpg.yaml
+
+database:
+  mode: cnpg
+  host: mastr-db-rw
+  port: 5432
+  name: mastr
+  # Reference the CNPG-managed app Secret directly.
+  existingSecret: mastr-db-app
+  existingSecretUserKey: username
+  existingSecretPasswordKey: password
+
+persistence:
+  cache:
+    size: 100Gi
+  output:
+    size: 30Gi
