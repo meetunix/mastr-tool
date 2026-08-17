@@ -43,6 +43,11 @@ spec:
         {{- include "mastr-tool.labels" . | nindent 8 }}
         app.kubernetes.io/component: database
     spec:
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        runAsNonRoot: true
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
