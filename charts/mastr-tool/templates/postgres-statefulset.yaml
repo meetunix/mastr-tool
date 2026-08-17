@@ -80,8 +80,9 @@ spec:
             - name: PGDATA
               value: {{ $db.pgdata | quote }}
           # Mirrors the `command:` block in docker-compose.yaml.
-          command:
-            - postgres
+          # Using `args` instead of `command` to preserve the official entrypoint
+          # which handles database initialization (initdb) on first start.
+          args:
             - -c
             - max_wal_size={{ $db.postgresqlParams.max_wal_size }}
             - -c
