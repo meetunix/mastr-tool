@@ -110,13 +110,13 @@ spec:
           # Mirrors the compose healthcheck.
           livenessProbe:
             exec:
-              command: ["CMD-SHELL", "pg_isready -U {{ $db.user }} -d {{ $db.name }}"]
+              command: ["sh", "-c", "pg_isready -U {{ $db.user }} -d {{ $db.name }}"]
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
           readinessProbe:
             exec:
-              command: ["CMD-SHELL", "pg_isready -U {{ $db.user }} -d {{ $db.name }}"]
+              command: ["sh", "-c", "pg_isready -U {{ $db.user }} -d {{ $db.name }}"]
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
