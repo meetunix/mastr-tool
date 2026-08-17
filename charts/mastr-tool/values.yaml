@@ -15,7 +15,6 @@ mastrTool:
   image:
     repository: nachtsieb/mastr-tool
     tag: ""
-    pullPolicy: IfNotPresent
   # Run as non-root (matches compose `user: 1000:1000`).
   podSecurityContext:
     runAsUser: 1000
@@ -38,7 +37,6 @@ mastrStatic:
   image:
     repository: nachtsieb/mastr-static
     tag: ""
-    pullPolicy: IfNotPresent
   # Port the container listens on (httpd configured to 8080).
   containerPort: 8080
   service:
@@ -87,7 +85,6 @@ database:
     image:
       repository: postgres
       tag: "18"
-      pullPolicy: IfNotPresent
     user: mastr
     password: password
     name: mastr

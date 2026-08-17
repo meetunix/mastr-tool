@@ -55,7 +55,7 @@ spec:
       containers:
         - name: mastr-static
           image: "{{ $ms.image.repository }}:{{ $ms.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ $ms.image.pullPolicy }}
+          imagePullPolicy: {{ $ms.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - name: http
               containerPort: {{ $ms.containerPort }}

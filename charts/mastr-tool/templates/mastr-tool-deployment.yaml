@@ -51,7 +51,7 @@ spec:
       containers:
         - name: mastr-tool
           image: "{{ $mt.image.repository }}:{{ $mt.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ $mt.image.pullPolicy }}
+          imagePullPolicy: {{ $mt.image.pullPolicy | default "IfNotPresent" }}
           env:
             - name: MASTR_FORCE_USING_EXISTING_DUMP
               value: {{ $mt.forceUsingExistingDump | quote }}
