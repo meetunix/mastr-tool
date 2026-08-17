@@ -64,7 +64,9 @@ spec:
       containers:
         - name: postgres
           image: "{{ $db.image.repository }}:{{ $db.image.tag }}"
-          imagePullPolicy: {{ $db.image.pullPolicy | default "IfNotPresent" }}
+          {{- with $db.image.pullPolicy }}
+          imagePullPolicy: {{ . }}
+          {{- end }}
           env:
             - name: POSTGRES_USER
               value: {{ $db.user | quote }}
