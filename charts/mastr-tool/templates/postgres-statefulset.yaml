@@ -78,7 +78,7 @@ spec:
             - name: POSTGRES_INITDB_ARGS
               value: {{ $db.initdbArgs | quote }}
             - name: PGDATA
-              value: {{ $db.pgdata | quote }}
+              value: /var/lib/postgresql/data/pgdata
           # Mirrors the `command:` block in docker-compose.yaml.
           # Using `args` instead of `command` to preserve the official entrypoint
           # which handles database initialization (initdb) on first start.
@@ -106,7 +106,7 @@ spec:
               containerPort: 5432
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/18/data
+              mountPath: /var/lib/postgresql/data
           # Mirrors the compose healthcheck.
           livenessProbe:
             exec:
