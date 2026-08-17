@@ -83,3 +83,87 @@ der Bundesnetzagentur vorliegt.
 ```bash
 docker compose -f docker-compose.convert.yaml logs -f mastr-tool
 ```
+
+## Deployment auf Kubernetes
+
+mastr-tool wird über das Helm-Chart in [`charts/mastr-tool`](charts/mastr-tool) deployt. Es bringt den
+Backend-Scheduler (`mastr-tool`), den http-Server für die Exporte (`mastr-static`) und eine eigenständige
+PostgreSQL-Datenbank mit. **Nicht enthalten ist `mastr-app`** – die WebUI besitzt ein eigenes Helm-Chart
+im [mastr-app-Repository](https://codeberg.org/nachtsieb/mastr-app) und wird separat installiert.
+
+### Voraussetzungen
+
+- Kubernetes-Cluster mit einem Ingress-Controller
+- `helm` >= 3
+- Eine `StorageClass`, die `ReadWriteMany` unterstützt (für das `output`-PVC, damit `mastr-static` die von
+  `mastr-tool` geschriebenen Exporte lesen kann). Alternativ beide Pods über Affinity auf denselben Knoten
+  legen und `ReadWriteOnce` verwenden.
+
+### Installation
+
+```bash
+# Chart-Abhängigkeiten (falls vorhanden) aktualisieren
+helm dependency build charts/mastr-tool
+
+# Eigene Werte anpassen (siehe Minimal-Beispiel unten) und installieren
+helm install mastr charts/mastr-tool -n mastr --create-namespace -f my-values.yaml
+```
+
+### Upgrade
+
+```bash
+helm upgrade mastr charts/mastr-tool -n mastr -f my-values.yaml
+```
+
+### Minimale `my-values.yaml`
+
+```yaml
+mastrTool:
+  image:
+    repository: nachtsieb/mastr-tool
+    tag: latest
+  forceUsingExistingDump: false
+  resources: {}
+
+mastrStatic:
+  enabled: true
+  image:
+    repository: nachtsieb/mastr-static
+    tag: latest
+  service:
+    type: ClusterIP
+    port: 8080
+  ingress:
+    enabled: true
+    className: ""                 # leer = Cluster-Default-Ingress-Class
+    annotations: {}
+    hosts:
+      - host: mastr-static.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+
+database:
+  mode: standalone
+  port: 5432
+  standalone:
+    image:
+      repository: postgres
+      tag: "18"
+    user: mastr
+    password: "change-me-please"
+    name: mastr
+    storage: 50Gi
+    storageClassName: ""
+    resources: {}
+
+persistence:
+  cache:
+    size: 80Gi
+    storageClassName: ""
+    accessModes: [ReadWriteOnce]
+  output:
+    size: 20Gi
+    storageClassName: ""          # musst be RWX StorageClass
+    accessModes: [ReadWriteMany]
+```
