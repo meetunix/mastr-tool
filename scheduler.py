@@ -51,7 +51,7 @@ def run_mastr_download():
 
         # Wait with timeout
         try:
-            process.communicate(timeout=7200)
+            process.communicate(timeout=1440)
             duration = time.time() - start_time
             if process.returncode == 0:
                 logger.info(f"MASTR download script completed successfully in {duration:.2f}s")
