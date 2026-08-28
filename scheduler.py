@@ -51,7 +51,7 @@ def run_mastr_download():
 
         # Wait with timeout
         try:
-            process.communicate(timeout=1440)
+            process.communicate(timeout=14400)
             duration = time.time() - start_time
             if process.returncode == 0:
                 logger.info(f"MASTR download script completed successfully in {duration:.2f}s")
@@ -69,7 +69,7 @@ def run_mastr_download():
                     process.wait(timeout=10)
                 except ProcessLookupError:
                     pass
-            logger.error("MASTR download script timed out after 2 hours")
+            logger.error("MASTR download script timed out after 4 hours")
     except Exception as e:
         logger.error(f"Error running MASTR download script: {e}")
     finally:
