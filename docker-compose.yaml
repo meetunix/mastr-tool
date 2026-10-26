@@ -5,10 +5,13 @@ services:
     image: mastr-tool:latest
     build: .
     container_name: mastr-tool
-    restart: unless-stopped
+    # "on-failure": a successful one-shot run (MASTR_FORCE_USING_EXISTING_DUMP)
+    # exits with code 0 and must not be restarted; failures are retried
+    restart: on-failure
     user: 1000:1000
     environment:
       MASTR_FORCE_USING_EXISTING_DUMP: "${MASTR_FORCE_USING_EXISTING_DUMP:-false}" # use existing dump and do not download
+      MASTR_SKIP_IMPORT_AND_EXPORT: "${MASTR_SKIP_IMPORT_AND_EXPORT:-false}" # skip import, enrichment and export completely
     volumes:
       - ${MASTR_CACHE_DIR}:/mastr/cache
       - ${MASTR_OUTPUT_DIR}:/mastr/output

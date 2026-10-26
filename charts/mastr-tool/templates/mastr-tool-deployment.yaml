@@ -57,6 +57,8 @@ spec:
           env:
             - name: MASTR_FORCE_USING_EXISTING_DUMP
               value: {{ $mt.forceUsingExistingDump | quote }}
+            - name: MASTR_SKIP_IMPORT_AND_EXPORT
+              value: {{ $mt.skipImportAndExport | quote }}
             # DB connection (consumed by db/db_utils.py:get_db_connection).
             - name: DB_HOST
               value: {{ include "mastr-tool.dbHost" . | quote }}

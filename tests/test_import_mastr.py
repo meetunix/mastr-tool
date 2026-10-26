@@ -60,6 +60,22 @@ class TestCreateSchema:
         assert "CREATE INDEX IF NOT EXISTS Bundesland_idx ON EinheitenWind(Bundesland);" in schema
         assert "CREATE INDEX IF NOT EXISTS Personenart_idx ON Marktakteure(Personenart);" in schema
 
+    def test_column_names_are_separated_from_their_type(self, tmp_path):
+        """Regression: names longer than the 56-char padding used to be glued
+        to the SQL type (e.g. '...Flaechennutzungtext'), producing invalid DDL."""
+        import re
+
+        from db.entities import Einheiten as AllEntities
+
+        path = tmp_path / "schema.sql"
+        import_mastr.create_schema(path)
+        schema = path.read_text()
+        for entity in AllEntities:
+            for column in entity.value:
+                assert re.search(rf"^\s*{re.escape(column.name)}\s", schema, re.M), (
+                    f"{entity.name}.{column.name} is not separated from its type in the DDL"
+                )
+
 
 def wind_xml(record_count):
     records = "".join(

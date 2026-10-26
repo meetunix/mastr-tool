@@ -3,6 +3,7 @@
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
 
@@ -23,16 +24,16 @@ def signal_handler(sig, frame):
     _shutdown = True
 
 
-def run_mastr_download():
-    """Execute the download-mastr.sh script"""
+def run_mastr_download() -> bool:
+    """Execute the download-mastr.sh script. Returns True on success."""
     global _is_running
-    
+
     with _lock:
         if _is_running:
             logger.info("Skipping: previous MASTR download still in progress")
-            return
+            return True
         _is_running = True
-    
+
     start_time = time.time()
     try:
         logger.info("Starting MASTR download script")
@@ -55,8 +56,11 @@ def run_mastr_download():
             duration = time.time() - start_time
             if process.returncode == 0:
                 logger.info(f"MASTR download script completed successfully in {duration:.2f}s")
-            else:
-                logger.error(f"MASTR download script failed with return code {process.returncode} after {duration:.2f}s")
+                return True
+            logger.error(
+                f"MASTR download script failed with return code {process.returncode} after {duration:.2f}s"
+            )
+            return False
         except subprocess.TimeoutExpired:
             # Kill the entire process group (parent + all children)
             try:
@@ -70,8 +74,10 @@ def run_mastr_download():
                 except ProcessLookupError:
                     pass
             logger.error("MASTR download script timed out after 4 hours")
+            return False
     except Exception as e:
         logger.error(f"Error running MASTR download script: {e}")
+        return False
     finally:
         _is_running = False
 
@@ -89,9 +95,13 @@ def main():
 
     if _force_using_existing_dump():
         logger.info("MASTR_FORCE_USING_EXISTING_DUMP is set, running pipeline once without scheduling")
-        run_mastr_download()
-        logger.info("Pipeline run complete, exiting (no recurring schedule)")
-        return
+        success = run_mastr_download()
+        if success:
+            logger.info("Pipeline run complete, exiting (no recurring schedule)")
+            return
+        # exit non-zero so restart policies like "on-failure" can react
+        logger.error("Pipeline run failed")
+        sys.exit(1)
 
     schedule.every(30).minutes.do(run_mastr_download)
 

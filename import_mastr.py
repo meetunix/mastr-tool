@@ -63,7 +63,9 @@ def create_schema(path_schema: Path) -> None:
             first_col = True
             for col in table.value:
                 curr_column = col
-                s += f"{',' if not first_col else ''}\n{col.name:56s}"  # column
+                # pad the column name to 56 chars and always append a space,
+                # so names longer than the padding stay separated from the type
+                s += f"{',' if not first_col else ''}\n{col.name:56s} "  # column
                 s += f"{col.value.type.value[1]:16s}"  # data type
                 s += f"{'NOT NULL' if col.value.not_null else '':16s}"  # NULLABLE
                 s += f"{'PRIMARY KEY' if col.value.primary_key else ''}"  # PKEY

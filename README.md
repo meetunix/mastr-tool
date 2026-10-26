@@ -48,6 +48,12 @@ MASTR_CACHE_DIR=/pfad/zum/cache
 
 # Export-Verzeichnis (CSV-, Parquet- und Excel-Exporte)
 MASTR_OUTPUT_DIR=/pfad/zum/export
+
+# Vorhandenen Dump ohne Download-Prüfung verwenden (einmaliger Pipeline-Lauf, Container endet danach)
+MASTR_FORCE_USING_EXISTING_DUMP=false
+
+# Import, Anreicherung und Export komplett überspringen (z.B. Neustart ohne Datenbank- oder Export-Änderungen)
+MASTR_SKIP_IMPORT_AND_EXPORT=false
 ```
 
 ### Zwei Compose-Dateien

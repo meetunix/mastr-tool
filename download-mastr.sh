@@ -3,6 +3,7 @@ shopt -s nocasematch
 
 # MASTR_CACHE: Main cache directory, must be big and works best on filesystems with transparent compression
 # MASTR_FORCE_USING_EXISTING_DUMP: Force pipeline run without downloading dump
+# MASTR_SKIP_IMPORT_AND_EXPORT: Skip database import, enrichment and export (e.g. restart without touching database or exports)
 
 PYTHON="/mastr/.venv/bin/python3"
 
@@ -21,6 +22,7 @@ REQUIRED_ENVS=(
   SYSTEMD_ID
   EXPORT_DIR
   MASTR_FORCE_USING_EXISTING_DUMP
+  MASTR_SKIP_IMPORT_AND_EXPORT
 )
 
 
@@ -134,11 +136,15 @@ mastr_csv_export() {
 mastr_import() {
   wait_time 10 # wait for some db initialization tasks
   start=$(date +%s)
-  mastr_db_import
-  mastr_db_enrichment
-  mastr_csv_export
+  if [[ $MASTR_SKIP_IMPORT_AND_EXPORT =~ ^(yes|true)$ ]] ; then
+    log_info "skip import, enrichment and export (MASTR_SKIP_IMPORT_AND_EXPORT is set)"
+  else
+    mastr_db_import
+    mastr_db_enrichment
+    mastr_csv_export
+  fi
   end=$(date +%s)
-  log_info "import, enrichment and export took $(( (end - start) / 60 )) minutes"
+  log_info "pipeline took $(( (end - start) / 60 )) minutes"
 }
 
 write_dump_date_file() {

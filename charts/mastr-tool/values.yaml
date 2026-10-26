@@ -22,6 +22,8 @@ mastrTool:
     fsGroup: 1000
   # Force using an existing dump instead of downloading (one-shot pipeline run).
   forceUsingExistingDump: false
+  # Skip database import, enrichment and export completely.
+  skipImportAndExport: false
   # Extra env vars appended to the container.
   extraEnv: []
   resources: {}

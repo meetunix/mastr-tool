@@ -10,7 +10,7 @@ import polars as pl
 import pytest
 from openpyxl import load_workbook
 
-from db.entities import Einheiten, Marktakteur
+from db.entities import Einheiten, Marktakteur, Type
 from db.polars_schema import build_polars_schema
 from export_mastr import (
     ConvertExportJob,
@@ -83,6 +83,18 @@ class TestSelectStatements:
             statement = build_exporter().select_stmts[mastr_type]
             table = mastr_type.value.entity.name
             assert f"ON {table}.AnlagenbetreiberMastrNummer = Marktakteure.MastrNummer" in statement
+
+    def test_exported_boolean_columns_are_udf_wrapped(self):
+        """Regression: COPY renders raw booleans as t/f, which polars cannot
+        parse as Boolean - every boolean column of an exported entity must
+        carry a UDF (boolean_hr -> ja/nein)."""
+        exported = [mastr_type.value.entity.value for mastr_type in MastrType] + [Marktakteur]
+        for entity_class in exported:
+            for column in entity_class:
+                if column.value.type is Type.BOOLEAN:
+                    assert column.value.udf is not None, (
+                        f"{entity_class.__name__}.{column.name} is exported as raw boolean"
+                    )
 
 
 class TestLatinify:
