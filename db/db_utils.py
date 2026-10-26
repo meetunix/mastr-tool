@@ -34,7 +34,7 @@ class DBConverter:
         elif field_type == Type.INT:
             return int(value)
         elif field_type == Type.BOOLEAN:
-            return value.lower().startswith(("true", "yes", "ja"))
+            return value.strip().lower() in ("true", "1", "yes", "ja")
         elif field_type == Type.TIMESTAMP:
             return datetime.fromisoformat(value)
         elif field_type == Type.DATE:
@@ -55,6 +55,8 @@ class DBElementWriter:
         self.sql_statement = self.__get_sql_insert_statement()
         self.batch_list = []
         self.batch_count = 0
+        # precomputed lookup keys for the hot import path (called once per record)
+        self.__fields = [(column.name, f"{column.name}_nv", column.value.type) for column in entity.value]
 
     def write(self, element: Element) -> None:
         self.batch_list.append(self.__get_values(element))
@@ -80,12 +82,23 @@ class DBElementWriter:
 
     def __get_values(self, element: Element) -> list:
         """build the parameter values for one row used by the INSERT INTO statement."""
-        sql_params = []
-        for subentity in self.entity.value:
-            value = element.findtext(subentity.name)
-            # print(f"{subentity.name:64} -> {value}")
+        # single pass over the record's child elements (first occurrence wins)
+        content: dict[str, str | None] = {}
+        for child in element:
+            if child.tag not in content:
+                content[child.tag] = child.text
 
-            sql_params.append(self.converter.convert(value, subentity.value[1]))
-        # print(sql_params)
+        convert = self.converter.convert
+        sql_params = []
+        for name, nv_name, field_type in self.__fields:
+            value = content.get(name)
+            # MaStR export rule: a field whose "nicht vorhanden" flag
+            # (<field>_nv) is true has no valid value - any content of the
+            # field itself must be ignored.
+            nv_flag = content.get(nv_name)
+            if nv_flag is not None and nv_flag.strip().lower() in ("true", "1"):
+                value = None
+
+            sql_params.append(convert(value, field_type))
 
         return sql_params

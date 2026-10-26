@@ -13,9 +13,8 @@ _TYPE_TO_POLARS: dict[Type, type[pl.DataType]] = {
 
 
 def _column_dtype(column) -> type[pl.DataType]:
-    col_opts = column.value
-    sql_type: Type = col_opts[1]
-    udf = col_opts[4] if len(col_opts) > 4 else None
+    sql_type: Type = column.value.type
+    udf = column.value.udf
     if udf is not None:
         return pl.String
     return _TYPE_TO_POLARS[sql_type]

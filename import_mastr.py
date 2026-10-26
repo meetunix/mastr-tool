@@ -40,10 +40,16 @@ def parse_and_write_xml(file: Path, entity: Einheiten, silent: bool) -> None:
     if not silent:
         logger.info(f"import file {file.name}")
     db_writer = DBElementWriter(entity, get_db_connection())
+    root = None
     for event, elem in ET.iterparse(file, events=("start", "end")):
-        if event == "end" and elem.tag == entity.value.__name__:
+        if event == "start":
+            if root is None:
+                root = elem
+            continue
+        if elem.tag == entity.value.__name__:
             db_writer.write(elem)
             elem.clear()  # Free memory held by this element
+            root.clear()  # Drop the processed record from the growing tree
     db_writer.cleanup()
 
 
@@ -58,9 +64,9 @@ def create_schema(path_schema: Path) -> None:
             for col in table.value:
                 curr_column = col
                 s += f"{',' if not first_col else ''}\n{col.name:56s}"  # column
-                s += f"{col.value[1].value[1]:16s}"  # data type
-                s += f"{'NOT NULL' if col.value[2] else '':16s}"  # NULLABLE
-                s += f"{'PRIMARY KEY' if col.value[3] else ''}"  # PKEY
+                s += f"{col.value.type.value[1]:16s}"  # data type
+                s += f"{'NOT NULL' if col.value.not_null else '':16s}"  # NULLABLE
+                s += f"{'PRIMARY KEY' if col.value.primary_key else ''}"  # PKEY
                 first_col = False
             s += "\n);\n\n"
         for index in Indices:

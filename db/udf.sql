@@ -165,3 +165,16 @@ $$
     LANGUAGE SQL
     IMMUTABLE
     RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION katalog_list(ids text) RETURNS text AS
+$$
+    SELECT string_agg(katalogwert, ', ' ORDER BY ord)
+    FROM (
+        SELECT katalog(x::integer) AS katalogwert, ord
+        FROM unnest(regexp_split_to_array(ids, '[^0-9]+')) WITH ORDINALITY AS u(x, ord)
+        WHERE x <> ''
+    ) AS mapped
+$$
+    LANGUAGE SQL
+    IMMUTABLE
+    RETURNS NULL ON NULL INPUT;

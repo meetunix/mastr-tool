@@ -81,14 +81,16 @@ class MastrExporter:
         table_name = Einheiten.Marktakteure.name
         for column in Marktakteur:
             column_name = f"{table_name}.{column.name}"
-            col_opts = column.value
-            udf = col_opts[4] if len(col_opts) > 4 else None
+            udf = column.value.udf
+            # prefix the operator columns to disambiguate them from main entity
+            # columns with the same name (Land, Bundesland, Strasse, ...)
+            alias = f"Marktakteur_{column.name}"
             if udf:
                 udf: str = udf.value
                 udf = udf.replace("{{field}}", column_name)
-                columns += f"\t{udf} {column.name},\n"
+                columns += f"\t{udf} {alias},\n"
             else:
-                columns += f"\t{column_name},\n"
+                columns += f"\t{column_name} {alias},\n"
 
         return columns
 
@@ -101,8 +103,7 @@ class MastrExporter:
             columns = ""
             for column in main_table:
                 column_name = f"{table_name}.{column.name}"
-                col_opts = column.value
-                udf = col_opts[4] if len(col_opts) > 4 else None
+                udf = column.value.udf
                 if udf:
                     udf: str = udf.value
                     udf = udf.replace("{{field}}", column_name)
@@ -259,9 +260,9 @@ def write_excel_parallel(job: ConvertExportJob) -> None:
 
 
 def write_parquet_parallel(job: ConvertExportJob) -> None:
-    # has_header=False + skip_rows=1: the CSV header contains duplicate column
-    # names (entity vs Marktakteur overlap), so we take column names from the
-    # supplied schema instead.
+    # has_header=False + skip_rows=1: column names and dtypes are taken from
+    # the supplied schema, which is the single source of truth shared with the
+    # CSV/Excel export (identical, unique column names).
     df = pl.scan_csv(
         job.csv_source_file,
         has_header=False,
