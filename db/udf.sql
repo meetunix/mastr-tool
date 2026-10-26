@@ -6,64 +6,6 @@ $$
     IMMUTABLE
     RETURNS NULL ON NULL INPUT;
 
-CREATE OR REPLACE FUNCTION netzbetreiberpruefungsstatus(id integer) RETURNS text AS
-$$
-    SELECT CASE
-        WHEN id = 0
-             then 'ungeprüft'
-        WHEN id = 1
-             then 'geprüft'
-        WHEN id = 2
-             then 'nicht vorgesehen'
-             else 'unbekannt'
-           end
-$$
-    LANGUAGE SQL
-    IMMUTABLE
-    RETURNS NULL ON NULL INPUT;
-
-CREATE OR REPLACE FUNCTION energietraeger(id integer) RETURNS text AS
-$$
-    SELECT CASE
-        WHEN id = 1
-             then 'andere Gase'
-        WHEN id = 2
-             then 'Biomasse'
-        WHEN id = 3
-             then 'Braunkohle'
-        WHEN id = 5
-             then 'Erdgas'
-        WHEN id = 6
-             then 'Geothermie'
-        WHEN id = 7
-             then 'Grubengas'
-        WHEN id = 8
-             then 'Kernenergie'
-        WHEN id = 9
-             then 'Klärschlamm'
-        WHEN id = 12
-             then 'Mineralölprodukt'
-        WHEN id = 13
-             then 'nicht biogener Abfall'
-        WHEN id = 14
-             then 'Solare Strahlungsenergie'
-        WHEN id = 15
-             then 'Solarthermie'
-        WHEN id = 16
-             then 'Speicher'
-        WHEN id = 17
-             then 'Steinkohle'
-        WHEN id = 18
-             then 'Wärme'
-        WHEN id = 19
-             then 'Wind'
-             else 'unbekannt'
-           end
-$$
-    LANGUAGE SQL
-    IMMUTABLE
-    RETURNS NULL ON NULL INPUT;
-
 CREATE OR REPLACE FUNCTION marktfunktion(id integer) RETURNS text AS
 $$
     SELECT CASE

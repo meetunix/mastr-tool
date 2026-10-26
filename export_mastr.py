@@ -62,6 +62,12 @@ class MastrOption:
 class MastrType(Enum):
     WIND = MastrOption(Einheiten.EinheitenWind, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET})
     SOLAR = MastrOption(Einheiten.EinheitenSolar, True, True, {DataFormats.CSV, DataFormats.PARQUET})
+    BIOMASSE = MastrOption(
+        Einheiten.EinheitenBiomasse, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}
+    )
+    WASSER = MastrOption(
+        Einheiten.EinheitenWasser, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}
+    )
 
 
 class MastrExporter:
