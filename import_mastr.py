@@ -72,7 +72,14 @@ def create_schema(path_schema: Path) -> None:
                 first_col = False
             s += "\n);\n\n"
         for index in Indices:
-            i += f"CREATE INDEX IF NOT EXISTS {index.value.name}_idx ON {index.name}({index.value.name});\n\n"
+            # plain index on the raw column: the state export filters by the
+            # catalog ID ("WHERE <table>.bundesland = <id>"). An expression
+            # index on katalog(<column>) is not possible in PostgreSQL -
+            # functions that access tables cannot run during CREATE INDEX.
+            i += (
+                f"CREATE INDEX IF NOT EXISTS {index.name}_{index.value.name}_idx "
+                f"ON {index.name}({index.value.name});\n\n"
+            )
         s += i
     except Exception as e:
         logger.exception("Exception while creating schema")
@@ -85,6 +92,9 @@ def create_schema(path_schema: Path) -> None:
 def write_schema(path_schema: Path, path_udf: Path) -> None:
     conn = get_db_connection()
     with conn.cursor() as curr:
+        # the schema (tables + indices) runs first: the SQL-language UDF
+        # katalog() references the katalogwerte table, which must exist
+        # when the function is created
         schema = path_schema.read_text() + "\n" + path_udf.read_text()
         curr.execute(schema)
         conn.commit()

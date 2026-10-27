@@ -14,6 +14,7 @@ from db.entities import Einheiten, Marktakteur, Type
 from db.polars_schema import build_polars_schema
 from export_mastr import (
     ConvertExportJob,
+    DataFormats,
     MastrExporter,
     MastrType,
     write_excel_parallel,
@@ -144,6 +145,22 @@ class TestFileConversion:
         assert frame.columns == list(schema.keys())
         assert frame.height == 2
 
+    def test_excel_sheet_titles_fit_the_excel_limit(self):
+        """Excel (all versions, including 365) rejects worksheet titles longer
+        than 31 characters - openpyxl only warns, but Excel shows a repair
+        dialog when opening such files. The file name carries the full
+        identity, the sheet title stays short on purpose."""
+        for mastr_type in MastrType:
+            title = mastr_type.value.sheet_title
+            assert len(title) <= 31, f"{mastr_type.name}: sheet title {title!r} exceeds Excel's 31-character limit"
+
+    def test_large_datasets_have_no_excel_format(self):
+        """Solar and Stromspeicher are too large for usable Excel files
+        (openpyxl writes ~240k cells/s on a single core; Stromspeicher has
+        ~1.5M units) - they are exported as CSV and Parquet only."""
+        for mastr_type in (MastrType.SOLAR, MastrType.STROMSPEICHER):
+            assert DataFormats.EXCEL not in mastr_type.value.data_formats, mastr_type.name
+
     def test_excel_contains_all_rows(self, tmp_path):
         schema = build_polars_schema(Einheiten.EinheitenSolar)
         csv_path = tmp_path / "solar.csv"
@@ -156,3 +173,27 @@ class TestFileConversion:
         workbook = load_workbook(excel_path)
         sheet = workbook.active
         assert sheet.max_row == 4  # header + 3 data rows
+
+    def test_excel_uses_the_sheet_title_not_the_job_name(self, tmp_path):
+        """Regression: the sheet title used to be the job name (the file
+        descriptor), which exceeds Excel's 31-character limit for many
+        exports (e.g. geothermie_grubengas_druckentspannung_mecklenburg-vorpommern)."""
+        import warnings
+
+        schema = build_polars_schema(Einheiten.EinheitenWind)
+        csv_path = tmp_path / "geothermie_grubengas_druckentspannung_mecklenburg-vorpommern.csv"
+        excel_path = tmp_path / "geothermie_grubengas_druckentspannung_mecklenburg-vorpommern.xlsx"
+        write_csv_with_schema(csv_path, schema, rows=2)
+
+        job = ConvertExportJob(
+            name="geothermie_grubengas_druckentspannung_mecklenburg-vorpommern",
+            file_output_path=excel_path,
+            csv_source_file=csv_path,
+            sheet_title="Geothermie",
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # fail on the openpyxl UserWarning
+            write_excel_parallel(job)
+
+        workbook = load_workbook(excel_path)
+        assert workbook.active.title == "Geothermie"

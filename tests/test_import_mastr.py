@@ -57,8 +57,40 @@ class TestCreateSchema:
         path = tmp_path / "schema.sql"
         import_mastr.create_schema(path)
         schema = path.read_text()
-        assert "CREATE INDEX IF NOT EXISTS Bundesland_idx ON EinheitenWind(Bundesland);" in schema
-        assert "CREATE INDEX IF NOT EXISTS Personenart_idx ON Marktakteure(Personenart);" in schema
+        assert "CREATE INDEX IF NOT EXISTS EinheitenWind_Bundesland_idx ON EinheitenWind(Bundesland);" in schema
+        assert "CREATE INDEX IF NOT EXISTS Marktakteure_Personenart_idx ON Marktakteure(Personenart);" in schema
+        assert (
+            "CREATE INDEX IF NOT EXISTS Katalogwerte_KatalogKategorieId_idx ON Katalogwerte(KatalogKategorieId);"
+            in schema
+        )
+
+    def test_bundesland_indices_support_the_export_state_filter(self, tmp_path):
+        """The state export filters on the raw column
+        (<table>.bundesland = <catalog id>) - every exported table needs a
+        plain Bundesland index, or the planner runs every state export as a
+        sequential scan. An expression index on katalog(bundesland) is not an
+        alternative: functions that access tables cannot run during
+        CREATE INDEX."""
+        from export_mastr import MastrType
+
+        path = tmp_path / "schema.sql"
+        import_mastr.create_schema(path)
+        schema = path.read_text()
+        for mastr_type in MastrType:
+            table = mastr_type.value.entity.name
+            assert f"ON {table}(Bundesland)" in schema, table
+
+    def test_every_index_has_a_unique_name(self, tmp_path):
+        """Regression: the index name used to be just '<column>_idx', so all
+        Bundesland indices shared one name and 'IF NOT EXISTS' silently skipped
+        every table after the first - only EinheitenWind got an index."""
+        import re
+
+        path = tmp_path / "schema.sql"
+        import_mastr.create_schema(path)
+        schema = path.read_text()
+        names = re.findall(r"CREATE INDEX IF NOT EXISTS (\S+?) ON", schema)
+        assert len(names) == len(set(names)), "duplicate index names in schema"
 
     def test_column_names_are_separated_from_their_type(self, tmp_path):
         """Regression: names longer than the 56-char padding used to be glued

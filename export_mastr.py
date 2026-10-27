@@ -49,6 +49,7 @@ class CsvExportJob(ExportJob):
 class ConvertExportJob(ExportJob):
     csv_source_file: Path
     schema: Optional[dict[str, type[pl.DataType]]] = None
+    sheet_title: str = "Daten"
 
 
 @dataclass
@@ -57,16 +58,48 @@ class MastrOption:
     germany: bool
     states: bool
     data_formats: set[DataFormats]
+    # worksheet title for the Excel export: Excel (all versions, including
+    # 365) rejects sheet titles longer than 31 characters - the file name
+    # carries the full identity, the title stays short on purpose
+    sheet_title: str
 
 
 class MastrType(Enum):
-    WIND = MastrOption(Einheiten.EinheitenWind, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET})
-    SOLAR = MastrOption(Einheiten.EinheitenSolar, True, True, {DataFormats.CSV, DataFormats.PARQUET})
+    WIND = MastrOption(
+        Einheiten.EinheitenWind, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}, "Wind"
+    )
+    SOLAR = MastrOption(Einheiten.EinheitenSolar, True, True, {DataFormats.CSV, DataFormats.PARQUET}, "Solar")
     BIOMASSE = MastrOption(
-        Einheiten.EinheitenBiomasse, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}
+        Einheiten.EinheitenBiomasse, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}, "Biomasse"
     )
     WASSER = MastrOption(
-        Einheiten.EinheitenWasser, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}
+        Einheiten.EinheitenWasser, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}, "Wasser"
+    )
+    GEOTHERMIE_GRUBENGAS_DRUCKENTSPANNUNG = MastrOption(
+        Einheiten.EinheitenGeothermieGrubengasDruckentspannung,
+        True,
+        True,
+        {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET},
+        "Geothermie",
+    )
+    STROMSPEICHER = MastrOption(
+        Einheiten.EinheitenStromSpeicher,
+        True,
+        True,
+        # no Excel: the dataset (~1.5M units) is far too large for a usable
+        # Excel file - openpyxl would grind for tens of minutes per file
+        {DataFormats.CSV, DataFormats.PARQUET},
+        "Stromspeicher",
+    )
+    KERNKRAFT = MastrOption(
+        Einheiten.EinheitenKernkraft, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}, "Kernkraft"
+    )
+    VERBRENNUNG = MastrOption(
+        Einheiten.EinheitenVerbrennung,
+        True,
+        True,
+        {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET},
+        "Verbrennung",
     )
 
 
@@ -79,8 +112,29 @@ class MastrExporter:
         self.csv_files_states: dict[MastrType, list[Path]] = {k: [] for k in MastrType}
         self.csv_files_germany: dict[MastrType, Optional[Path]] = {k: None for k in MastrType}
         self.select_stmts: dict[MastrType, str] = {k: "" for k in MastrType}
-        self.state_filter = "WHERE katalog(<<table>>.bundesland) = '<<STATE>>'"
+        # filter by the raw catalog ID: the Bundesland columns carry a plain
+        # index (see import_mastr.create_schema), which the planner can only
+        # use for a comparison on the column itself - not on katalog(column)
+        self.state_filter = "WHERE <<table>>.bundesland = <<ID>>"
         self.__create_select_stmts()
+
+    def __create_unit_state_ids(self, table: str) -> dict[str, int]:
+        """Resolve the Bundesland catalog IDs that the given unit table uses.
+
+        The dump carries two Bundesland ID spaces with identical names: the
+        unit tables reference one Katalogkategorie (IDs 1400-1416), the
+        Marktakteure another (IDs 332-347). The state mapping (category name
+        'Bundesland') returns the Marktakteure IDs - filtering the unit
+        tables with those IDs matches nothing. The filter IDs are therefore
+        derived from the unit table's own values."""
+        stmt = f"""
+            SELECT kw.wert, kw.id
+            FROM katalogwerte kw
+            WHERE kw.id IN (
+                SELECT DISTINCT Bundesland FROM {table} WHERE Bundesland IS NOT NULL
+            )
+        """
+        return {wert: state_id for wert, state_id in self.__query_db(stmt)}
 
     def __market_fields(self) -> str:
         columns = ""
@@ -164,12 +218,19 @@ class MastrExporter:
             csv_jobs.append(job)
 
         if mastr_option.states:
-            # create csv job for every state
+            # create csv job for every state; the filter ID comes from the
+            # unit table's own catalog values (see __create_unit_state_ids)
+            unit_state_ids = self.__create_unit_state_ids(type.value.entity.name)
             for _, state in self.states.items():
                 stmt = self.select_stmts[type]
-                state_filter = self.state_filter.replace("<<STATE>>", state).replace(
-                    "<<table>>", type.value.entity.name
-                )
+                state_id = unit_state_ids.get(state)
+                if state_id is not None:
+                    state_filter = self.state_filter.replace("<<ID>>", str(state_id)).replace(
+                        "<<table>>", type.value.entity.name
+                    )
+                else:
+                    # no unit of this type is registered in this state
+                    state_filter = "WHERE false"
                 stmt = stmt + " " + state_filter
                 stmt = f"COPY ({stmt}) TO STDOUT WITH (FORMAT CSV, HEADER)"
                 csv_path = out_path / Path(f"{type.name.lower()}_{self.latinify(state.lower())}.csv")
@@ -194,7 +255,12 @@ class MastrExporter:
             for csv_path in csv_files:
                 file_descr = ".".join(csv_path.name.split(".")[:-1])
                 excel_path = csv_path.parent / Path(file_descr + ".xlsx")
-                job = ConvertExportJob(name=file_descr, file_output_path=excel_path, csv_source_file=csv_path)
+                job = ConvertExportJob(
+                    name=file_descr,
+                    file_output_path=excel_path,
+                    csv_source_file=csv_path,
+                    sheet_title=mastr_option.sheet_title,
+                )
                 excel_jobs.append(job)
 
             # Reduce concurrency for Excel to avoid memory issues
@@ -253,9 +319,11 @@ def write_csv_parallel(job: CsvExportJob) -> None:
 def write_excel_parallel(job: ConvertExportJob) -> None:
     import csv
     from openpyxl import Workbook
-    
+
     wb = Workbook(write_only=True)
-    ws = wb.create_sheet(job.name)
+    # the sheet title must stay within Excel's 31-character limit - the
+    # job name (file descriptor) is often longer and only used for logging
+    ws = wb.create_sheet(job.sheet_title)
     
     with open(job.csv_source_file, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
