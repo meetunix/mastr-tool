@@ -101,6 +101,18 @@ class MastrType(Enum):
         {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET},
         "Verbrennung",
     )
+    GASERZEUGER = MastrOption(
+        Einheiten.EinheitenGasErzeuger, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}, "Gaserzeuger"
+    )
+    GASSPEICHER = MastrOption(
+        Einheiten.EinheitenGasSpeicher, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}, "Gasspeicher"
+    )
+    GASVERBRAUCHER = MastrOption(
+        Einheiten.EinheitenGasverbraucher, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}, "Gasverbraucher"
+    )
+    STROMVERBRAUCHER = MastrOption(
+        Einheiten.EinheitenStromVerbraucher, True, True, {DataFormats.CSV, DataFormats.EXCEL, DataFormats.PARQUET}, "Stromverbraucher"
+    )
 
 
 class MastrExporter:
