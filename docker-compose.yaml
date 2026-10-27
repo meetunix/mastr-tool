@@ -7,7 +7,7 @@ services:
     container_name: mastr-tool
     # "on-failure": a successful one-shot run (MASTR_FORCE_USING_EXISTING_DUMP)
     # exits with code 0 and must not be restarted; failures are retried
-    restart: on-failure
+    restart: unless-stopped
     user: 1000:1000
     environment:
       MASTR_FORCE_USING_EXISTING_DUMP: "${MASTR_FORCE_USING_EXISTING_DUMP:-false}" # use existing dump and do not download
