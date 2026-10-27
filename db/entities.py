@@ -304,6 +304,97 @@ class AnlageEegWind(Enum):
     VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
 
 
+class AnlageEegSolar(Enum):
+    EegMaStRNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP, not_null=True)
+    Registrierungsdatum = Column(Type.DATE)
+    EegInbetriebnahmedatum = Column(Type.DATE)
+    InanspruchnahmeZahlungNachEeg = Column(Type.BOOLEAN)
+    AnlagenschluesselEeg = Column(Type.TEXT)
+    AnlagenschluesselEeg_nv = Column(Type.BOOLEAN)
+    AnlagenkennzifferAnlagenregister = Column(Type.TEXT)
+    AnlagenkennzifferAnlagenregister_nv = Column(Type.BOOLEAN)
+    InstallierteLeistung = Column(Type.NUMERIC)
+    RegistrierungsnummerPvMeldeportal = Column(Type.TEXT)
+    RegistrierungsnummerPvMeldeportal_nv = Column(Type.BOOLEAN)
+    MieterstromZugeordnet = Column(Type.BOOLEAN)
+    MieterstromMeldedatum = Column(Type.DATE)
+    MieterstromErsteZuordnungZuschlag = Column(Type.DATE)
+    AusschreibungZuschlag = Column(Type.BOOLEAN)
+    ZugeordneteGebotsmenge = Column(Type.NUMERIC)
+    Zuschlagsnummer = Column(Type.TEXT)
+    AnlageBetriebsstatus = Column(Type.INT)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+
+
+class AnlageEegBiomasse(Enum):
+    EegMaStRNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP, not_null=True)
+    Registrierungsdatum = Column(Type.DATE)
+    EegInbetriebnahmedatum = Column(Type.DATE)
+    AnlagenschluesselEeg = Column(Type.TEXT)
+    AnlagenschluesselEeg_nv = Column(Type.BOOLEAN)
+    AnlagenkennzifferAnlagenregister = Column(Type.TEXT)
+    AnlagenkennzifferAnlagenregister_nv = Column(Type.BOOLEAN)
+    InstallierteLeistung = Column(Type.NUMERIC)
+    AusschliesslicheVerwendungBiomasse = Column(Type.BOOLEAN)
+    AusschreibungZuschlag = Column(Type.BOOLEAN)
+    Zuschlagsnummer = Column(Type.TEXT)
+    BiogasInanspruchnahmeFlexiPraemie = Column(Type.BOOLEAN)
+    BiogasDatumInanspruchnahmeFlexiPraemie = Column(Type.DATE)
+    BiogasLeistungserhoehung = Column(Type.BOOLEAN)
+    BiogasDatumLeistungserhoehung = Column(Type.DATE)
+    BiogasUmfangLeistungserhoehung = Column(Type.NUMERIC)
+    BiogasGaserzeugungskapazitaet = Column(Type.NUMERIC)
+    BiogasGaserzeugungskapazitaet_nv = Column(Type.BOOLEAN)
+    BiogasHoechstbemessungsleistung = Column(Type.NUMERIC)
+    BiomethanErstmaligerEinsatz = Column(Type.DATE)
+    BiomethanErstmaligerEinsatz_nv = Column(Type.BOOLEAN)
+    AnlageBetriebsstatus = Column(Type.INT)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+
+
+class AnlageEegWasser(Enum):
+    EegMaStRNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP, not_null=True)
+    Registrierungsdatum = Column(Type.DATE)
+    EegInbetriebnahmedatum = Column(Type.DATE)
+    AnlagenschluesselEeg = Column(Type.TEXT)
+    AnlagenschluesselEeg_nv = Column(Type.BOOLEAN)
+    AnlagenkennzifferAnlagenregister = Column(Type.TEXT)
+    AnlagenkennzifferAnlagenregister_nv = Column(Type.BOOLEAN)
+    InstallierteLeistung = Column(Type.NUMERIC)
+    AnlageBetriebsstatus = Column(Type.INT)
+    ErtuechtigungIds = Column(Type.TEXT)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+
+
+class AnlageEegSpeicher(Enum):
+    EegMaStRNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP, not_null=True)
+    Registrierungsdatum = Column(Type.DATE)
+    EegInbetriebnahmedatum = Column(Type.DATE)
+    AnlagenschluesselEeg = Column(Type.TEXT)
+    AnlagenschluesselEeg_nv = Column(Type.BOOLEAN)
+    AusschreibungZuschlag = Column(Type.BOOLEAN)
+    Zuschlagsnummer = Column(Type.TEXT)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+
+
+class AnlageEegGeothermieGrubengasDruckentspannung(Enum):
+    EegMaStRNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP, not_null=True)
+    Registrierungsdatum = Column(Type.DATE)
+    EegInbetriebnahmedatum = Column(Type.DATE)
+    AnlagenschluesselEeg = Column(Type.TEXT)
+    AnlagenschluesselEeg_nv = Column(Type.BOOLEAN)
+    AnlagenkennzifferAnlagenregister = Column(Type.TEXT)
+    AnlagenkennzifferAnlagenregister_nv = Column(Type.BOOLEAN)
+    InstallierteLeistung = Column(Type.NUMERIC)
+    AnlageBetriebsstatus = Column(Type.INT)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+
+
 class Marktakteur(Enum):
     MastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
     DatumLetzeAktualisierung = Column(Type.TIMESTAMP)
@@ -381,6 +472,11 @@ class Einheiten(Enum):
     EinheitenSolar = EinheitSolar
     EinheitenBiomasse = EinheitBiomasse
     AnlagenEegWind = AnlageEegWind
+    AnlagenEegSolar = AnlageEegSolar
+    AnlagenEegBiomasse = AnlageEegBiomasse
+    AnlagenEegWasser = AnlageEegWasser
+    AnlagenEegSpeicher = AnlageEegSpeicher
+    AnlagenEegGeothermieGrubengasDruckentspannung = AnlageEegGeothermieGrubengasDruckentspannung
     Marktakteure = Marktakteur
     Katalogwerte = Katalogwert
     Katalogkategorien = Katalogkategorie
