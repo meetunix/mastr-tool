@@ -2,6 +2,7 @@
 shopt -s nocasematch
 
 # MASTR_CACHE: Main cache directory, must be big and works best on filesystems with transparent compression
+# MASTR_CONCURRENCY: Number of parallel processes for import, enrichment and export (default: CPU cores minus one)
 # MASTR_FORCE_USING_EXISTING_DUMP: Force pipeline run without downloading dump
 # MASTR_SKIP_IMPORT_AND_EXPORT: Skip database import, enrichment and export (e.g. restart without touching database or exports)
 
@@ -12,10 +13,18 @@ MASTR_CACHE_ENRICHER="$MASTR_CACHE/enricher"
 MASTR_CACHE_DUMP="$MASTR_CACHE/dump"
 MASTR_DUMP_FILE="$MASTR_CACHE/mastr-latest.zip"
 
+# fall back to one process on single-core systems (nproc - 1 would be 0)
+MASTR_CONCURRENCY="${MASTR_CONCURRENCY:-$(( $(nproc) > 1 ? $(nproc) - 1 : 1 ))}"
+
 SYSTEMD_ID="download-mastr.sh"
 EXPORT_DIR="/mastr/output/export"
 IMPORT_TIMESTAMP_FILE="$EXPORT_DIR/import_timestamp"
 DUMP_DATE_FILE="$EXPORT_DIR/dump_date"
+
+if ! [[ "$MASTR_CONCURRENCY" =~ ^[1-9][0-9]*$ ]]; then
+  echo "[$SYSTEMD_ID] [ERROR] MASTR_CONCURRENCY must be a positive integer, got: '$MASTR_CONCURRENCY'" >&2
+  exit 1
+fi
 
 REQUIRED_ENVS=(
   MASTR_CACHE
@@ -117,19 +126,19 @@ mastr_extract_dump(){
 
 mastr_db_import() {
   log_info "import mastr-dump into database"
-  $PYTHON import_mastr.py --cleanup --concurrency "$(($(nproc) - 1))" --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
+  $PYTHON import_mastr.py --cleanup --concurrency "$MASTR_CONCURRENCY" --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
   check_ret_val $? "error while importing to database" ""
 }
 
 mastr_db_enrichment() {
   log_info "enrich data in database"
-  $PYTHON enrich_mastr.py --concurrency "$(($(nproc) - 1))" --cache-dir $MASTR_CACHE_ENRICHER
+  $PYTHON enrich_mastr.py --concurrency "$MASTR_CONCURRENCY" --cache-dir $MASTR_CACHE_ENRICHER
   check_ret_val $? "error while data enrichment" ""
 }
 
 mastr_csv_export() {
   log_info "export csv files to $EXPORT_DIR"
-  $PYTHON export_mastr.py --force --concurrency "$(($(nproc) - 1))" $EXPORT_DIR
+  $PYTHON export_mastr.py --force --concurrency "$MASTR_CONCURRENCY" $EXPORT_DIR
   check_ret_val $? "error while exporting csv files from database" ""
 }
 

@@ -24,6 +24,8 @@ mastrTool:
   forceUsingExistingDump: false
   # Skip database import, enrichment and export completely.
   skipImportAndExport: false
+  # Parallel processes for import, enrichment and export ("" = CPU cores minus one).
+  concurrency: ""
   # Extra env vars appended to the container.
   extraEnv: []
   resources: {}

@@ -12,6 +12,7 @@ services:
     environment:
       MASTR_FORCE_USING_EXISTING_DUMP: "${MASTR_FORCE_USING_EXISTING_DUMP:-false}" # use existing dump and do not download
       MASTR_SKIP_IMPORT_AND_EXPORT: "${MASTR_SKIP_IMPORT_AND_EXPORT:-false}" # skip import, enrichment and export completely
+      MASTR_CONCURRENCY: "${MASTR_CONCURRENCY:-}" # parallel processes for import, enrichment and export (empty = CPU cores minus one)
     volumes:
       - ${MASTR_CACHE_DIR}:/mastr/cache
       - ${MASTR_OUTPUT_DIR}:/mastr/output
