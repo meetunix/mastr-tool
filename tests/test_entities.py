@@ -33,9 +33,17 @@ def test_column_attributes_are_well_formed():
             assert definition.udf is None or isinstance(definition.udf, SelectUDFs)
 
 
+# change-log datasets without a natural unique key carry no primary key
+# (a unit can appear in multiple Netzbetreiberzuordnung changes)
+ENTITIES_WITHOUT_PRIMARY_KEY = {"EinheitenAenderungNetzbetreiberzuordnungen"}
+
+
 def test_exactly_one_not_null_primary_key_per_table():
     for entity in ALL_ENTITIES:
         primary_keys = [c for c in entity.value if c.value.primary_key]
+        if entity.name in ENTITIES_WITHOUT_PRIMARY_KEY:
+            assert not primary_keys, f"{entity.name} is a change log and must not have a primary key"
+            continue
         assert len(primary_keys) == 1, f"{entity.name} has {len(primary_keys)} primary keys"
         assert primary_keys[0].value.not_null, f"{entity.name} primary key is nullable"
 
@@ -67,6 +75,23 @@ def test_einheiten_member_to_class_mapping():
         "EinheitenGasSpeicher": "EinheitGasSpeicher",
         "EinheitenGasverbraucher": "EinheitGasverbraucher",
         "EinheitenStromVerbraucher": "EinheitStromVerbraucher",
+        "AnlagenKwk": "AnlageKwk",
+        "AnlagenStromSpeicher": "AnlageStromSpeicher",
+        "AnlagenGasSpeicher": "AnlageGasSpeicher",
+        "Bilanzierungsgebiete": "Bilanzierungsgebiet",
+        "EinheitenAenderungNetzbetreiberzuordnungen": "EinheitenAenderungNetzbetreiberzuordnung",
+        "EinheitenGenehmigung": "EinheitGenehmigung",
+        "Einheitentypen": "Einheitentyp",
+        "Ertuechtigungen": "Ertuechtigung",
+        "GeloeschteUndDeaktivierteEinheiten": "GeloeschteUndDeaktivierteEinheit",
+        "GeloeschteUndDeaktivierteMarktakteure": "GeloeschterUndDeaktivierterMarktakteur",
+        "Lokationen": "Lokation",
+        "Lokationstypen": "Lokationstyp",
+        "MarktakteureUndRollen": "MarktakteurUndRolle",
+        "Marktfunktionen": "Marktfunktion",
+        "Marktrollen": "Marktrolle",
+        "Netzanschlusspunkte": "Netzanschlusspunkt",
+        "Netze": "Netz",
         "AnlagenEegWind": "AnlageEegWind",
         "AnlagenEegSolar": "AnlageEegSolar",
         "AnlagenEegBiomasse": "AnlageEegBiomasse",

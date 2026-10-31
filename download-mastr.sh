@@ -142,6 +142,14 @@ mastr_csv_export() {
   check_ret_val $? "error while exporting csv files from database" ""
 }
 
+mastr_db_dump() {
+  log_info "create database dump (pg_dump, zstd) at $EXPORT_DIR/mastr-latest.sql"
+  PGPASSWORD="${DB_PASSWORD:-password}" pg_dump \
+    -h "${DB_HOST:-db}" -p "${DB_PORT:-5432}" -U "${DB_USER:-mastr}" -d "${DB_NAME:-mastr}" \
+    --format=custom --compress=zstd --file="$EXPORT_DIR/mastr-latest.sql"
+  check_ret_val $? "error while creating database dump" "database dump written to $EXPORT_DIR/mastr-latest.sql"
+}
+
 mastr_import() {
   wait_time 10 # wait for some db initialization tasks
   start=$(date +%s)
@@ -151,6 +159,7 @@ mastr_import() {
     mastr_db_import
     mastr_db_enrichment
     mastr_csv_export
+    mastr_db_dump
   fi
   end=$(date +%s)
   log_info "pipeline took $(( (end - start) / 60 )) minutes"

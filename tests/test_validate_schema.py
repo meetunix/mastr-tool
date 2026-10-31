@@ -123,9 +123,11 @@ class TestValidateEntity:
         assert any("Wert" in e and "XSD type" in e for e in errors)
 
     def test_date_vs_timestamp_is_a_benign_warning(self, tmp_path):
+        # the column is Type.DATE; a synthetic dateTime in the XSD must
+        # produce a benign warning (converted losslessly), not an error
         content = build_xsd(
             Einheiten.Marktakteure,
-            {"RegistrierungsdatumMarktakteur": 'type="xs:date" name="RegistrierungsdatumMarktakteur" minOccurs="0"'},
+            {"RegistrierungsdatumMarktakteur": 'type="xs:dateTime" name="RegistrierungsdatumMarktakteur" minOccurs="0"'},
         )
         errors, warnings = validate_entity(
             Einheiten.Marktakteure, write_xsd(tmp_path, Einheiten.Marktakteure, content)

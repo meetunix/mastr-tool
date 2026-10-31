@@ -16,7 +16,6 @@ class SelectUDFs(Enum):
     Katalog = "katalog({{field}})"
     Boolean = "boolean_hr({{field}})"
     Marktfunktion = "marktfunktion({{field}})"
-    Marktrolle = "Marktrolle({{field}})"
     KatalogList = "katalog_list({{field}})"
 
 
@@ -92,6 +91,18 @@ class EinheitWasser(Enum):
     ArtDesZuflusses = Column(Type.INT, udf=SelectUDFs.Katalog)
     EegMaStRNummer = Column(Type.TEXT)
 
+    StrasseNichtGefunden = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    HausnummerNichtGefunden = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    DatumBeginnVoruebergehendeStilllegung = Column(Type.DATE)
+    AnschlussAnHoechstOderHochSpannung = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    Einsatzverantwortlicher = Column(Type.TEXT)
+    NameKraftwerk = Column(Type.TEXT)
+    NetzreserveZugeordnet = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    DatumNetzreserve = Column(Type.TIMESTAMP)
+    KapazitaetsreserveZugeordnet = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    DatumKapazitaetsreserve = Column(Type.TIMESTAMP)
+    InbetriebnahmedatumAmAktuellenStandort = Column(Type.DATE)
+    VorlaeufigeRegelzonenDerEinheit = Column(Type.TEXT)
 
 class EinheitWind(Enum):
     EinheitMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
@@ -162,6 +173,24 @@ class EinheitWind(Enum):
     Kuestenentfernung = Column(Type.NUMERIC)
     EegMaStRNummer = Column(Type.TEXT)
 
+    StrasseNichtGefunden = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    HausnummerNichtGefunden = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    Adresszusatz = Column(Type.TEXT)
+    BestandsanlageMastrNummer = Column(Type.TEXT)
+    NichtVorhandenInMigriertenEinheiten = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    AltAnlagenbetreiberMastrNummer = Column(Type.TEXT)
+    DatumDesBetreiberwechsels = Column(Type.DATE)
+    DatumRegistrierungDesBetreiberwechsels = Column(Type.DATE)
+    Einsatzverantwortlicher = Column(Type.TEXT)
+    GenMastrNummer = Column(Type.TEXT)
+    TechnologieFlugwindenergieanlage = Column(Type.INT, udf=SelectUDFs.Katalog)
+    Flughoehe = Column(Type.NUMERIC)
+    Flugradius = Column(Type.NUMERIC)
+    InbetriebnahmedatumAmAktuellenStandort = Column(Type.DATE)
+    GroesseDerInAnspruchGenommenenFlaeche = Column(Type.NUMERIC)
+    UeberwiegendeNutzungsartDerFlaecheVorErrichtung = Column(Type.INT, udf=SelectUDFs.Katalog)
+    VorherigerNutzungsartenbereichDerFlaeche = Column(Type.INT, udf=SelectUDFs.Katalog)
+    VorlaeufigeRegelzonenDerEinheit = Column(Type.TEXT)
 
 class EinheitSolar(Enum):
     EinheitMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
@@ -228,6 +257,19 @@ class EinheitSolar(Enum):
     Buergerenergie = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
     EegMaStRNummer = Column(Type.TEXT)
 
+    StrasseNichtGefunden = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    HausnummerNichtGefunden = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    Adresszusatz = Column(Type.TEXT)
+    NichtVorhandenInMigriertenEinheiten = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    AltAnlagenbetreiberMastrNummer = Column(Type.TEXT)
+    DatumDesBetreiberwechsels = Column(Type.DATE)
+    DatumRegistrierungDesBetreiberwechsels = Column(Type.DATE)
+    SpeicherAmGleichenOrt = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    NameDesSolarparks = Column(Type.TEXT)
+    LichteHoehe = Column(Type.NUMERIC)
+    InbetriebnahmedatumAmAktuellenStandort = Column(Type.DATE)
+    VorlaeufigeRegelzonenDerEinheit = Column(Type.TEXT)
+    SolaranlagenKategorie = Column(Type.INT)
 
 class EinheitBiomasse(Enum):
     EinheitMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
@@ -277,6 +319,25 @@ class EinheitBiomasse(Enum):
     EegMaStRNummer = Column(Type.TEXT)
     KwkMaStRNummer = Column(Type.TEXT)
 
+    Gemarkung = Column(Type.TEXT)
+    FlurFlurstuecknummern = Column(Type.TEXT)
+    StrasseNichtGefunden = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    HausnummerNichtGefunden = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    Adresszusatz = Column(Type.TEXT)
+    EinheitSystemstatus = Column(Type.INT, udf=SelectUDFs.Katalog)
+    NichtVorhandenInMigriertenEinheiten = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    AltAnlagenbetreiberMastrNummer = Column(Type.TEXT)
+    DatumDesBetreiberwechsels = Column(Type.DATE)
+    DatumRegistrierungDesBetreiberwechsels = Column(Type.DATE)
+    WeicDisplayName = Column(Type.TEXT)
+    Energietraeger = Column(Type.INT, udf=SelectUDFs.Katalog)
+    AnschlussAnHoechstOderHochSpannung = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    NetzreserveZugeordnet = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    DatumNetzreserve = Column(Type.TIMESTAMP)
+    KapazitaetsreserveZugeordnet = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    DatumKapazitaetsreserve = Column(Type.TIMESTAMP)
+    InbetriebnahmedatumAmAktuellenStandort = Column(Type.DATE)
+    VorlaeufigeRegelzonenDerEinheit = Column(Type.TEXT)
 
 class EinheitGeothermieGrubengasDruckentspannung(Enum):
     EinheitMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
@@ -302,6 +363,9 @@ class EinheitGeothermieGrubengasDruckentspannung(Enum):
     Ort = Column(Type.TEXT)
     Laengengrad = Column(Type.NUMERIC)
     Breitengrad = Column(Type.NUMERIC)
+    UTM_zone = Column(Type.TEXT)
+    UTM_ost = Column(Type.NUMERIC)
+    UTM_nord = Column(Type.NUMERIC)
     Registrierungsdatum = Column(Type.DATE)
     Inbetriebnahmedatum = Column(Type.DATE)
     DatumEndgueltigeStilllegung = Column(Type.DATE)
@@ -365,6 +429,9 @@ class EinheitStromSpeicher(Enum):
     Ort = Column(Type.TEXT)
     Laengengrad = Column(Type.NUMERIC)
     Breitengrad = Column(Type.NUMERIC)
+    UTM_zone = Column(Type.TEXT)
+    UTM_ost = Column(Type.NUMERIC)
+    UTM_nord = Column(Type.NUMERIC)
     Registrierungsdatum = Column(Type.DATE)
     Inbetriebnahmedatum = Column(Type.DATE)
     GeplantesInbetriebnahmedatum = Column(Type.DATE)
@@ -439,6 +506,9 @@ class EinheitKernkraft(Enum):
     Ort = Column(Type.TEXT)
     Laengengrad = Column(Type.NUMERIC)
     Breitengrad = Column(Type.NUMERIC)
+    UTM_zone = Column(Type.TEXT)
+    UTM_ost = Column(Type.NUMERIC)
+    UTM_nord = Column(Type.NUMERIC)
     Registrierungsdatum = Column(Type.DATE)
     Inbetriebnahmedatum = Column(Type.DATE)
     DatumEndgueltigeStilllegung = Column(Type.DATE)
@@ -500,6 +570,9 @@ class EinheitVerbrennung(Enum):
     Ort = Column(Type.TEXT)
     Laengengrad = Column(Type.NUMERIC)
     Breitengrad = Column(Type.NUMERIC)
+    UTM_zone = Column(Type.TEXT)
+    UTM_ost = Column(Type.NUMERIC)
+    UTM_nord = Column(Type.NUMERIC)
     Registrierungsdatum = Column(Type.DATE)
     Inbetriebnahmedatum = Column(Type.DATE)
     DatumEndgueltigeStilllegung = Column(Type.DATE)
@@ -578,6 +651,9 @@ class EinheitGasErzeuger(Enum):
     Ort = Column(Type.TEXT)
     Laengengrad = Column(Type.NUMERIC)
     Breitengrad = Column(Type.NUMERIC)
+    UTM_zone = Column(Type.TEXT)
+    UTM_ost = Column(Type.NUMERIC)
+    UTM_nord = Column(Type.NUMERIC)
     Registrierungsdatum = Column(Type.DATE)
     Inbetriebnahmedatum = Column(Type.DATE)
     GeplantesInbetriebnahmedatum = Column(Type.DATE)
@@ -621,6 +697,9 @@ class EinheitGasSpeicher(Enum):
     Ort = Column(Type.TEXT)
     Laengengrad = Column(Type.NUMERIC)
     Breitengrad = Column(Type.NUMERIC)
+    UTM_zone = Column(Type.TEXT)
+    UTM_ost = Column(Type.NUMERIC)
+    UTM_nord = Column(Type.NUMERIC)
     Registrierungsdatum = Column(Type.DATE)
     Inbetriebnahmedatum = Column(Type.DATE)
     GeplantesInbetriebnahmedatum = Column(Type.DATE)
@@ -669,6 +748,9 @@ class EinheitGasverbraucher(Enum):
     Ort = Column(Type.TEXT)
     Laengengrad = Column(Type.NUMERIC)
     Breitengrad = Column(Type.NUMERIC)
+    UTM_zone = Column(Type.TEXT)
+    UTM_ost = Column(Type.NUMERIC)
+    UTM_nord = Column(Type.NUMERIC)
     Registrierungsdatum = Column(Type.DATE)
     Inbetriebnahmedatum = Column(Type.DATE)
     GeplantesInbetriebnahmedatum = Column(Type.DATE)
@@ -712,6 +794,9 @@ class EinheitStromVerbraucher(Enum):
     Ort = Column(Type.TEXT)
     Laengengrad = Column(Type.NUMERIC)
     Breitengrad = Column(Type.NUMERIC)
+    UTM_zone = Column(Type.TEXT)
+    UTM_ost = Column(Type.NUMERIC)
+    UTM_nord = Column(Type.NUMERIC)
     Registrierungsdatum = Column(Type.DATE)
     Inbetriebnahmedatum = Column(Type.DATE)
     DatumEndgueltigeStilllegung = Column(Type.DATE)
@@ -888,7 +973,7 @@ class Marktakteur(Enum):
     Umsatzsteueridentifikationsnummer = Column(Type.TEXT)
     Umsatzsteueridentifikationsnummer_nv = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
     BundesnetzagenturBetriebsnummer = Column(Type.TEXT)
-    BundesnetzagenturBetriebsnummer_nv = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    BundesnetzagenturBetriebsnummer_nv = Column(Type.INT)  # xs:short 0/1, not a boolean flag per XSD
     LandAnZustelladresse = Column(Type.INT, udf=SelectUDFs.Katalog)  # katalog
     PostleitzahlAnZustelladresse = Column(Type.TEXT)
     OrtAnZustelladresse = Column(Type.TEXT)
@@ -897,7 +982,7 @@ class Marktakteur(Enum):
     HausnummerAnZustelladresse_nv = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
     AdresszusatzAnZustelladresse = Column(Type.TEXT)
     Kmu = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
-    RegistrierungsdatumMarktakteur = Column(Type.TIMESTAMP)
+    RegistrierungsdatumMarktakteur = Column(Type.DATE)
     HauptwirtdschaftszweigAbteilung = Column(Type.INT, udf=SelectUDFs.Katalog)  # katalog
     HauptwirtdschaftszweigGruppe = Column(Type.INT, udf=SelectUDFs.Katalog)  # katalog
     HauptwirtdschaftszweigAbschnitt = Column(Type.INT, udf=SelectUDFs.Katalog)  # katalog
@@ -909,6 +994,11 @@ class Marktakteur(Enum):
     BelieferungVonLetztverbrauchernGas = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
     BelieferungHaushaltskundenGas = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
 
+    Netz = Column(Type.TEXT)
+    Fax = Column(Type.TEXT)
+    Fax_nv = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)
+    RegisternummerPraefix = Column(Type.INT, udf=SelectUDFs.Katalog)
+    WebportalDesNetzbetreibers = Column(Type.TEXT)
 
 class Katalogwert(Enum):
     Id = Column(Type.INT, not_null=True, primary_key=True)
@@ -919,6 +1009,161 @@ class Katalogwert(Enum):
 class Katalogkategorie(Enum):
     Id = Column(Type.INT, not_null=True, primary_key=True)
     Name = Column(Type.TEXT)
+
+
+class AnlageKwk(Enum):
+    KwkMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    AusschreibungZuschlag = Column(Type.BOOLEAN)
+    Zuschlagnummer = Column(Type.TEXT)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP)
+    Inbetriebnahmedatum = Column(Type.DATE)
+    Registrierungsdatum = Column(Type.DATE)
+    ThermischeNutzleistung = Column(Type.NUMERIC)
+    ElektrischeKwkLeistung = Column(Type.NUMERIC)
+    AnlageBetriebsstatus = Column(Type.INT)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+
+class AnlageStromSpeicher(Enum):
+    MaStRNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    Registrierungsdatum = Column(Type.DATE)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP, not_null=True)
+    NutzbareSpeicherkapazitaet = Column(Type.NUMERIC)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+    AnlageBetriebsstatus = Column(Type.INT)
+
+class AnlageGasSpeicher(Enum):
+    MaStRNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP, not_null=True)
+    Speichername = Column(Type.TEXT)
+    Registrierungsdatum = Column(Type.DATE)
+    AnlageBetriebsstatus = Column(Type.INT)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+
+class Bilanzierungsgebiet(Enum):
+    Id = Column(Type.INT, not_null=True, primary_key=True)
+    Yeic = Column(Type.TEXT)
+    BilanzierungsgebietNetzanschlusspunkt = Column(Type.TEXT)
+    RegelzoneNetzanschlusspunkt = Column(Type.INT)
+
+class EinheitenAenderungNetzbetreiberzuordnung(Enum):
+    EinheitMastrNummer = Column(Type.TEXT)
+    LokationMastrNummer = Column(Type.TEXT)
+    NetzanschlusspunktMastrNummer = Column(Type.TEXT)
+    NetzbetreiberMastrNummerAlt = Column(Type.TEXT)
+    NetzbetreiberMastrNummerNeu = Column(Type.TEXT)
+    ArtDerAenderung = Column(Type.INT)
+    RegistrierungsdatumNetzbetreiberzuordnungsaenderung = Column(Type.TIMESTAMP)
+    Netzbetreiberzuordnungsaenderungsdatum = Column(Type.TIMESTAMP)
+
+class EinheitGenehmigung(Enum):
+    GenMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP)
+    Art = Column(Type.INT)
+    Datum = Column(Type.DATE)
+    Behoerde = Column(Type.TEXT)
+    Aktenzeichen = Column(Type.TEXT)
+    Frist = Column(Type.DATE)
+    Frist_nv = Column(Type.BOOLEAN)
+    WasserrechtsNummer = Column(Type.TEXT)
+    WasserrechtAblaufdatum = Column(Type.DATE)
+    WasserrechtAblaufdatum_nv = Column(Type.BOOLEAN)
+    Registrierungsdatum = Column(Type.DATE)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+    DatumDerAntragstellung = Column(Type.DATE)
+
+class Einheitentyp(Enum):
+    Id = Column(Type.INT, not_null=True, primary_key=True)
+    Wert = Column(Type.TEXT)
+
+class Ertuechtigung(Enum):
+    Id = Column(Type.INT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP)
+    EegMastrNummer = Column(Type.TEXT)
+    Ertuechtigungsart = Column(Type.INT)
+    ErtuechtigungIstZulassungspflichtig = Column(Type.BOOLEAN)
+    Leistungserhoehung = Column(Type.NUMERIC)
+    WiederinbetriebnahmeDatum = Column(Type.DATE)
+
+class GeloeschteUndDeaktivierteEinheit(Enum):
+    EinheitMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP, not_null=True)
+    Einheittyp = Column(Type.INT)
+    EinheitSystemstatus = Column(Type.INT)
+    EinheitBetriebsstatus = Column(Type.INT)
+    DatumDerLoeschung = Column(Type.DATE)
+    EinheitLoeschgrund = Column(Type.INT)
+
+class GeloeschterUndDeaktivierterMarktakteur(Enum):
+    MarktakteurMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    MarktakteurStatus = Column(Type.TEXT)
+    DatumLetzteAktualisierung = Column(Type.TEXT, not_null=True)
+    DatumDerLoeschung = Column(Type.DATE)
+    MarktakteurLoeschgrund = Column(Type.INT)
+
+class Lokation(Enum):
+    MastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP)
+    NameDerTechnischenLokation = Column(Type.TEXT)
+    Lokationtyp = Column(Type.INT)
+    VerknuepfteEinheitenMaStRNummern = Column(Type.TEXT)
+    NetzanschlusspunkteMaStRNummern = Column(Type.TEXT)
+
+class Lokationstyp(Enum):
+    Id = Column(Type.INT, not_null=True, primary_key=True)
+    Wert = Column(Type.TEXT)
+
+class MarktakteurUndRolle(Enum):
+    MastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    MarktakteurMastrNummer = Column(Type.TEXT)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP)
+    Marktrolle = Column(Type.TEXT)
+    BundesnetzagenturBetriebsnummer = Column(Type.TEXT)
+    BundesnetzagenturBetriebsnummer_nv = Column(Type.BOOLEAN)
+    Marktpartneridentifikationsnummer = Column(Type.TEXT)
+    Marktpartneridentifikationsnummer_nv = Column(Type.BOOLEAN)
+    KontaktdatenMarktrolle = Column(Type.TEXT)
+
+class Marktfunktion(Enum):
+    Id = Column(Type.INT, not_null=True, primary_key=True)
+    Wert = Column(Type.TEXT)
+
+class Marktrolle(Enum):
+    Id = Column(Type.INT, not_null=True, primary_key=True)
+    Wert = Column(Type.TEXT)
+    Marktfunktion = Column(Type.INT)
+    Sparte = Column(Type.INT)
+
+class Netzanschlusspunkt(Enum):
+    NetzanschlusspunktMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    NetzanschlusspunktBezeichnung = Column(Type.TEXT)
+    LetzteAenderung = Column(Type.TIMESTAMP)
+    LokationMaStRNummer = Column(Type.TEXT)
+    NameDerTechnischenLokation = Column(Type.TEXT)
+    Lokationtyp = Column(Type.INT)
+    MaximaleEinspeiseleistung = Column(Type.NUMERIC)
+    MaximaleAusspeiseleistung = Column(Type.NUMERIC)
+    Gasqualitaet = Column(Type.INT)
+    Messlokation = Column(Type.TEXT)
+    Marktgebiet = Column(Type.INT)
+    Spannungsebene = Column(Type.INT)
+    Nettoengpassleistung = Column(Type.NUMERIC)
+    BilanzierungsgebietNetzanschlusspunktId = Column(Type.INT)
+    Netzanschlusskapazitaet = Column(Type.NUMERIC)
+    RegelzoneNetzanschlusspunkt = Column(Type.INT)
+    NetzMaStRNummer = Column(Type.TEXT)
+    NochInPlanung = Column(Type.BOOLEAN)
+    NetzbetreiberMaStRNummer = Column(Type.TEXT)
+
+class Netz(Enum):
+    MastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
+    DatumLetzteAktualisierung = Column(Type.TIMESTAMP)
+    Sparte = Column(Type.INT)
+    KundenAngeschlossen = Column(Type.BOOLEAN)
+    GeschlossenesVerteilnetz = Column(Type.BOOLEAN)
+    Bezeichnung = Column(Type.TEXT)
+    Marktgebiet = Column(Type.INT)
+    Bundesland = Column(Type.TEXT)
+    Bilanzierungsgebiete = Column(Type.TEXT)
 
 
 class Einheiten(Enum):
@@ -934,6 +1179,23 @@ class Einheiten(Enum):
     EinheitenGasSpeicher = EinheitGasSpeicher
     EinheitenGasverbraucher = EinheitGasverbraucher
     EinheitenStromVerbraucher = EinheitStromVerbraucher
+    AnlagenKwk = AnlageKwk
+    AnlagenStromSpeicher = AnlageStromSpeicher
+    AnlagenGasSpeicher = AnlageGasSpeicher
+    Bilanzierungsgebiete = Bilanzierungsgebiet
+    EinheitenAenderungNetzbetreiberzuordnungen = EinheitenAenderungNetzbetreiberzuordnung
+    EinheitenGenehmigung = EinheitGenehmigung
+    Einheitentypen = Einheitentyp
+    Ertuechtigungen = Ertuechtigung
+    GeloeschteUndDeaktivierteEinheiten = GeloeschteUndDeaktivierteEinheit
+    GeloeschteUndDeaktivierteMarktakteure = GeloeschterUndDeaktivierterMarktakteur
+    Lokationen = Lokation
+    Lokationstypen = Lokationstyp
+    MarktakteureUndRollen = MarktakteurUndRolle
+    Marktfunktionen = Marktfunktion
+    Marktrollen = Marktrolle
+    Netzanschlusspunkte = Netzanschlusspunkt
+    Netze = Netz
     AnlagenEegWind = AnlageEegWind
     AnlagenEegSolar = AnlageEegSolar
     AnlagenEegBiomasse = AnlageEegBiomasse
@@ -952,6 +1214,14 @@ class EinheitenGeoEnrichment(Enum):
     EinheitenWind = EinheitWind
     EinheitenSolar = EinheitSolar
     EinheitenBiomasse = EinheitBiomasse
+    EinheitenGeothermieGrubengasDruckentspannung = EinheitGeothermieGrubengasDruckentspannung
+    EinheitenStromSpeicher = EinheitStromSpeicher
+    EinheitenKernkraft = EinheitKernkraft
+    EinheitenVerbrennung = EinheitVerbrennung
+    EinheitenGasErzeuger = EinheitGasErzeuger
+    EinheitenGasSpeicher = EinheitGasSpeicher
+    EinheitenGasverbraucher = EinheitGasverbraucher
+    EinheitenStromVerbraucher = EinheitStromVerbraucher
 
 
 # create additional indices

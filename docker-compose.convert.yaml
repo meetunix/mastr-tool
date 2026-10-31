@@ -10,8 +10,8 @@ services:
     restart: on-failure
     user: 1000:1000
     environment:
-      MASTR_FORCE_USING_EXISTING_DUMP: "${MASTR_FORCE_USING_EXISTING_DUMP:-false}"
-      MASTR_SKIP_IMPORT_AND_EXPORT: "${MASTR_SKIP_IMPORT_AND_EXPORT:-false}" # skip import, enrichment and export completely
+      MASTR_FORCE_USING_EXISTING_DUMP: "true"
+      MASTR_SKIP_IMPORT_AND_EXPORT: "false" # skip import, enrichment and export completely
     volumes:
       - ${MASTR_CACHE_DIR}:/mastr/cache
       - ${MASTR_OUTPUT_DIR}:/mastr/output
