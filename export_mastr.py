@@ -11,6 +11,7 @@ import polars as pl
 from db.db_utils import get_db_connection
 from db.entities import *
 from db.polars_schema import build_polars_schema
+from utils.atomic_write import atomic_write, cleanup_stale_temp_files
 from utils.mastr_logger import get_mastr_logger, LogLevel
 
 logger = get_mastr_logger(LogLevel.INFO)
@@ -321,11 +322,17 @@ class MastrExporter:
 ### specific export functions for parallel processing ###
 def write_csv_parallel(job: CsvExportJob) -> None:
     conn = get_db_connection()
-    if job.force_file_write or not job.file_output_path.exists():
-        with open(job.file_output_path, "w", encoding="utf-8") as f:
-            with conn.cursor() as cursor:
-                cursor.copy_expert(sql=job.sql_stmt, file=f)
-    conn.close()
+    try:
+        if job.force_file_write or not job.file_output_path.exists():
+
+            def write_csv(temp_path: Path) -> None:
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    with conn.cursor() as cursor:
+                        cursor.copy_expert(sql=job.sql_stmt, file=f)
+
+            atomic_write(job.file_output_path, write_csv)
+    finally:
+        conn.close()
 
 
 def write_excel_parallel(job: ConvertExportJob) -> None:
@@ -336,13 +343,13 @@ def write_excel_parallel(job: ConvertExportJob) -> None:
     # the sheet title must stay within Excel's 31-character limit - the
     # job name (file descriptor) is often longer and only used for logging
     ws = wb.create_sheet(job.sheet_title)
-    
+
     with open(job.csv_source_file, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
         for row in reader:
             ws.append(row)
-    
-    wb.save(job.file_output_path)
+
+    atomic_write(job.file_output_path, wb.save)
 
 
 def write_parquet_parallel(job: ConvertExportJob) -> None:
@@ -356,7 +363,7 @@ def write_parquet_parallel(job: ConvertExportJob) -> None:
         schema=job.schema,
         try_parse_dates=True,
     )
-    df.sink_parquet(job.file_output_path, compression="zstd")
+    atomic_write(job.file_output_path, lambda temp_path: df.sink_parquet(temp_path, compression="zstd"))
 
 
 def execute_jobs_in_parallel(concurrency: int, func, jobs: list[ExportJob]) -> None:
@@ -379,6 +386,11 @@ def main():
 
     connection = get_db_connection()
     exporter = MastrExporter(connection, args.concurrency)
+    # remove temporary files left behind by crashed runs before writing new
+    # exports (the pipeline is single-writer: no other run is active here)
+    stale_temp_files = cleanup_stale_temp_files(args.OUTPUT)
+    if stale_temp_files:
+        logger.info(f"removed {stale_temp_files} stale temporary file(s) from previous runs")
     for mastr_type in MastrType:
         logger.info(f"--- {mastr_type.name} ---")
         exporter.write_csv(mastr_type, args.OUTPUT, force=args.force)

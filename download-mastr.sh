@@ -143,11 +143,21 @@ mastr_csv_export() {
 }
 
 mastr_db_dump() {
-  log_info "create database dump (pg_dump, zstd) at $EXPORT_DIR/mastr-latest.sql"
-  PGPASSWORD="${DB_PASSWORD:-password}" pg_dump \
+  # write to a temporary file and move it into place afterwards: mv within
+  # the same directory is an atomic rename, so readers (mastr-static) never
+  # see a partially written dump
+  local dump_file="$EXPORT_DIR/mastr-latest.sql"
+  local tmp_file="$EXPORT_DIR/.mastr-latest.sql.tmp-$$"
+  log_info "create database dump (pg_dump, zstd) at $dump_file"
+  if PGPASSWORD="${DB_PASSWORD:-password}" pg_dump \
     -h "${DB_HOST:-db}" -p "${DB_PORT:-5432}" -U "${DB_USER:-mastr}" -d "${DB_NAME:-mastr}" \
-    --format=custom --compress=zstd --file="$EXPORT_DIR/mastr-latest.sql"
-  check_ret_val $? "error while creating database dump" "database dump written to $EXPORT_DIR/mastr-latest.sql"
+    --format=custom --compress=zstd --file="$tmp_file" ; then
+    mv -f "$tmp_file" "$dump_file"
+    check_ret_val $? "error while moving database dump" "database dump written to $dump_file"
+  else
+    rm -f "$tmp_file"
+    check_ret_val 1 "error while creating database dump" "database dump not written"
+  fi
 }
 
 mastr_import() {
@@ -165,6 +175,23 @@ mastr_import() {
   log_info "pipeline took $(( (end - start) / 60 )) minutes"
 }
 
+write_file_atomic() {
+  # write to a temporary file and rename it into place: the app reads these
+  # files over HTTP and must never see a partially written file
+  local content="$1"
+  local target="$2"
+  local tmp_file
+  tmp_file="$EXPORT_DIR/.$(basename "$target").tmp-$$"
+
+  if printf '%s\n' "$content" > "$tmp_file" ; then
+    mv -f "$tmp_file" "$target"
+  else
+    rm -f "$tmp_file"
+    log_err "error while writing $target"
+    return 1
+  fi
+}
+
 write_dump_date_file() {
 
   if [[ $1 =~ ^https://.*\.de/.*_([0-9]{8})_.*\.zip$ ]] ; then
@@ -175,10 +202,10 @@ write_dump_date_file() {
 
     dump_date_stamp="$y-$m-$d"
     log_info "write dump-timestamp ($dump_date_stamp) to $DUMP_DATE_FILE"
-    echo "$dump_date_stamp" > $DUMP_DATE_FILE
+    write_file_atomic "$dump_date_stamp" "$DUMP_DATE_FILE"
 
     log_info "write import-timestamp (current time) to $IMPORT_TIMESTAMP_FILE"
-    date --iso-8601=minutes > $IMPORT_TIMESTAMP_FILE
+    write_file_atomic "$(date --iso-8601=minutes)" "$IMPORT_TIMESTAMP_FILE"
   fi
 }
 

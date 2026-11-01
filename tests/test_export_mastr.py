@@ -197,3 +197,44 @@ class TestFileConversion:
 
         workbook = load_workbook(excel_path)
         assert workbook.active.title == "Geothermie"
+
+
+class TestAtomicExportWrites:
+    """All exports are written atomically (temp file + rename): readers only
+    ever see complete files, and a failed export leaves the previous file
+    and no temporary files behind."""
+
+    def assert_no_temp_files(self, directory):
+        leftovers = [p.name for p in directory.iterdir() if p.name.startswith(".")]
+        assert leftovers == []
+
+    def test_excel_write_leaves_no_temp_file(self, tmp_path):
+        schema = build_polars_schema(Einheiten.EinheitenSolar)
+        csv_path = tmp_path / "solar.csv"
+        excel_path = tmp_path / "solar.xlsx"
+        write_csv_with_schema(csv_path, schema, rows=2)
+
+        write_excel_parallel(ConvertExportJob(name="solar", file_output_path=excel_path, csv_source_file=csv_path))
+
+        assert excel_path.exists()
+        self.assert_no_temp_files(tmp_path)
+
+    def test_parquet_failed_write_keeps_old_file(self, tmp_path):
+        schema = build_polars_schema(Einheiten.EinheitenWind)
+        csv_path = tmp_path / "wind.csv"
+        parquet_path = tmp_path / "wind.parq"
+        write_csv_with_schema(csv_path, schema, rows=2)
+        job = ConvertExportJob(name="wind", file_output_path=parquet_path, csv_source_file=csv_path, schema=schema)
+        write_parquet_parallel(job)
+        previous_content = parquet_path.read_bytes()
+
+        # a malformed row fails while the lazy frame is sunk, i.e. in the
+        # middle of the atomic write
+        csv_path.write_text(
+            csv_path.read_text(encoding="utf-8") + "only,one,column\n", encoding="utf-8"
+        )
+        with pytest.raises(Exception):
+            write_parquet_parallel(job)
+
+        assert parquet_path.read_bytes() == previous_content
+        self.assert_no_temp_files(tmp_path)
