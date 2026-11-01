@@ -6,6 +6,17 @@ die Datengrundlage und damit notwendig für den Betrieb der [mastr-app](https://
 
 Die mastr-app kann unter https://mastr.nachtsieb.de ausprobiert werden.
 
+Der komplette, durch die Bundesnetzagentur bereit gestellte Dump wird in eine PostgreSQL-Datenbank konvertiert und
+die Einheiten der zwölf Energieträger (Wind, Solar, Biomasse, Wasser, Geothermie/Grubengas/Druckentspannung,
+Stromspeicher, Kernkraft, Verbrennung, Gaserzeuger, Gasspeicher, Gasverbraucher, Stromverbraucher) werden in andere
+Formate konvertiert. Der komplette Datenbankauszug steht nach der Konvertierung ebenfalls zum Download bereit
+(Datei `mastr-latest.sql`: zstd-komprimiertes `pg_dump`-Archiv im Custom-Format, Einspielen mit `pg_restore`,
+mindestens PostgreSQL 16). Im Anreicherungsschritt werden derzeit die GEO-Koordinaten (Längen-, Breitengrad)
+zusätzlich um UTM-Koordinaten erweitert, sodass 3 neue Spalten hinzugefügt werden: `utm_zone, utm_ost, utm_nord`.
+
+Wenn man nur die den aktuellen Stand des Marktstammdatenregisters konvertieren, Anreichern und die Daten im Anschluss
+über http://localhost:8080 herunterladen möchte, reicht mastr-tool aus. Die WebUI mastr-app ist nicht notwendig.
+
 ## Verwendung mit docker-compose
 
 ### Funktionsweise von mastr-tool
@@ -30,7 +41,7 @@ geteilt:
 4. **Export**: Die angereicherten Daten werden konvertiert in:
     - **CSV**
     - **Parquet**
-    - **Excel** (`.xlsx`, nicht für Solar, da zu groß)
+    - **Excel** (`.xlsx`, nicht für Solar und Stromspeicher, da zu groß)
 
 ### Voraussetzungen
 
@@ -48,6 +59,9 @@ MASTR_CACHE_DIR=/pfad/zum/cache
 
 # Export-Verzeichnis (CSV-, Parquet- und Excel-Exporte)
 MASTR_OUTPUT_DIR=/pfad/zum/export
+
+# Anzahl paralleler Prozesse für Import, Anreicherung und Export (leer = CPU-Kerne minus eins)
+MASTR_CONCURRENCY=
 
 # Vorhandenen Dump ohne Download-Prüfung verwenden (einmaliger Pipeline-Lauf, Container endet danach)
 MASTR_FORCE_USING_EXISTING_DUMP=false
