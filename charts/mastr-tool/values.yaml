@@ -100,11 +100,11 @@ database:
     storageClassName: ""
     # Postgres tuning flags (mirrors the `command:` block in compose).
     postgresqlParams:
-      max_wal_size: 2GB
+      max_wal_size: 1GB
       checkpoint_timeout: 15min
       checkpoint_completion_target: "0.9"
       wal_buffers: 16MB
-      wal_compression: "on"
+      wal_compression: "lz4"
       shared_buffers: 256MB
       synchronous_commit: "off"
       bgwriter_lru_maxpages: "200"
