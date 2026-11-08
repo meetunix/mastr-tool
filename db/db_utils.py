@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
+import io
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from typing import Union
 from xml.etree.ElementTree import Element
 
 import psycopg2
-from psycopg2.extras import execute_batch
 
-from .entities import Einheiten, Type
+from enricher.enricher import CoordinateConverter
+from .entities import Einheiten, EinheitenGeoEnrichment, Type
+
+# characters with a special meaning in COPY's text format
+_COPY_ESCAPES = str.maketrans({"\\": "\\\\", "\n": "\\n", "\r": "\\r", "\t": "\\t"})
 
 
 def get_db_connection():
@@ -45,6 +49,49 @@ class DBConverter:
             raise ValueError(f'Unable ro convert type "{field_type}" for value "{value}"')
 
 
+def to_copy_text(value) -> str:
+    """Render a converted value as a field of COPY's text format."""
+    if value is None:
+        return "\\N"
+    if isinstance(value, bool):
+        return "t" if value else "f"
+    if isinstance(value, float):
+        return repr(value)
+    if isinstance(value, datetime):
+        if value.tzinfo is not None:
+            # COPY drops the offset of a value for a "timestamp" column - an
+            # INSERT (psycopg2) converted it to the session time zone, which
+            # is UTC in the Postgres images used by compose and the chart
+            value = value.astimezone(timezone.utc).replace(tzinfo=None)
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value).translate(_COPY_ESCAPES)
+
+
+class UtmRowEnricher:
+    """Fills UTM_zone/UTM_ost/UTM_nord of import rows that carry geo
+    coordinates (Breitengrad/Laengengrad)."""
+
+    def __init__(self, column_names: list[str]):
+        self.__lat = column_names.index("Breitengrad")
+        self.__lon = column_names.index("Laengengrad")
+        self.__zone = column_names.index("UTM_zone")
+        self.__east = column_names.index("UTM_ost")
+        self.__north = column_names.index("UTM_nord")
+        self.__converter = CoordinateConverter()
+
+    def enrich(self, rows: list[list]) -> None:
+        rows = [row for row in rows if row[self.__lat] is not None and row[self.__lon] is not None]
+        if not rows:
+            return
+        utms = self.__converter.geo_to_utm_batch([row[self.__lat] for row in rows], [row[self.__lon] for row in rows])
+        for row, utm in zip(rows, utms):
+            row[self.__zone] = str(utm.zone)
+            row[self.__east] = utm.easting
+            row[self.__north] = utm.northing
+
+
 class DBElementWriter:
     BATCH_LIMIT = 1000
 
@@ -52,11 +99,17 @@ class DBElementWriter:
         self.entity = entity
         self.connection = connection
         self.converter = DBConverter()
-        self.sql_statement = self.__get_sql_insert_statement()
+        self.copy_statement = self.__get_copy_statement()
         self.batch_list = []
         self.batch_count = 0
         # precomputed lookup keys for the hot import path (called once per record)
         self.__fields = [(column.name, f"{column.name}_nv", column.value.type) for column in entity.value]
+        # units with geo coordinates get their UTM coordinates during the import
+        self.__utm_enricher = (
+            UtmRowEnricher([column.name for column in entity.value])
+            if entity.name in EinheitenGeoEnrichment.__members__
+            else None
+        )
 
     def write(self, element: Element) -> None:
         self.batch_list.append(self.__get_values(element))
@@ -69,19 +122,25 @@ class DBElementWriter:
         self.connection.close()
 
     def __write_batch(self) -> None:
-        with self.connection.cursor() as cursor:
-            execute_batch(cursor, self.sql_statement, self.batch_list)
-            self.connection.commit()
+        if self.batch_list:
+            if self.__utm_enricher is not None:
+                self.__utm_enricher.enrich(self.batch_list)
+            data = io.StringIO()
+            for row in self.batch_list:
+                data.write("\t".join(to_copy_text(value) for value in row))
+                data.write("\n")
+            data.seek(0)
+            with self.connection.cursor() as cursor:
+                cursor.copy_expert(self.copy_statement, data)
+                self.connection.commit()
         self.batch_list = []
         self.batch_count = 0
 
-    def __get_sql_insert_statement(self) -> str:
-        stmnt = f"INSERT INTO {self.entity.name} ({','.join([e.name for e in self.entity.value])}) "
-        stmnt += f"VALUES ({','.join(['%s' for _ in self.entity.value])})"
-        return stmnt
+    def __get_copy_statement(self) -> str:
+        return f"COPY {self.entity.name} ({','.join([e.name for e in self.entity.value])}) FROM STDIN"
 
     def __get_values(self, element: Element) -> list:
-        """build the parameter values for one row used by the INSERT INTO statement."""
+        """build the values for one row written by the COPY statement."""
         # single pass over the record's child elements (first occurrence wins)
         content: dict[str, str | None] = {}
         for child in element:

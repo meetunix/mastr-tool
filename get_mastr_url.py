@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# script returns 20 if source file has not been changed since last check
+# script prints the dump URL (first line) and its remote ETag (second line, empty if unknown)
+# script returns 20 if source file has not been changed since the last successful pipeline run
 import argparse
 import sys
 from pathlib import Path
@@ -19,27 +20,19 @@ def get_remote_etag(url: str) -> Optional[str]:
 
 
 def get_local_etag(etag_path: Path) -> Optional[str]:
-    return etag_path.read_text(encoding="utf-8") if etag_path.exists() and etag_path.is_file() else None
+    # strip: download-mastr.sh writes the file with a trailing newline
+    return etag_path.read_text(encoding="utf-8").strip() if etag_path.exists() and etag_path.is_file() else None
 
 
-def is_etag_new(local_etag_path: Path, mastr_url: str) -> bool:
-    remote_etag = get_remote_etag(mastr_url)
-    local_etag = get_local_etag(local_etag_path)
-
-    # sys.stderr.write(f"{local_etag} <-> {remote_etag}\n")
-
+def is_etag_new(local_etag_path: Path, remote_etag: Optional[str]) -> bool:
+    """Compare the remote ETag with the ETag of the last successful pipeline
+    run. The local ETag file is not written here: download-mastr.sh stores it
+    only after the whole pipeline succeeded, so a failed run is retried at
+    the next check."""
     if remote_etag is None:
         return False
 
-    if local_etag is None:
-        local_etag_path.write_text(remote_etag)
-        return False
-
-    if local_etag != remote_etag:
-        local_etag_path.write_text(remote_etag)
-        return True
-    else:
-        return False
+    return get_local_etag(local_etag_path) != remote_etag
 
 
 def main() -> None:
@@ -56,10 +49,10 @@ def main() -> None:
     mastr_url = ahref["href"]
 
     etag_file = args.cache_dir / Path("etag.txt")
-    if is_etag_new(etag_file, mastr_url):
-        print(mastr_url)
-    else:
-        print(mastr_url)
+    remote_etag = get_remote_etag(mastr_url)
+    print(mastr_url)
+    print(remote_etag or "")
+    if not is_etag_new(etag_file, remote_etag):
         sys.exit(20)
 
 

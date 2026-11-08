@@ -2,16 +2,24 @@
 shopt -s nocasematch
 
 # MASTR_CACHE: Main cache directory, must be big and works best on filesystems with transparent compression
-# MASTR_CONCURRENCY: Number of parallel processes for import, enrichment and export (default: CPU cores minus one)
+# MASTR_CONCURRENCY: Number of parallel processes for import and export (default: CPU cores minus one)
 # MASTR_FORCE_USING_EXISTING_DUMP: Force pipeline run without downloading dump
-# MASTR_SKIP_IMPORT_AND_EXPORT: Skip database import, enrichment and export (e.g. restart without touching database or exports)
+# MASTR_SKIP_IMPORT_AND_EXPORT: Skip database import (incl. UTM enrichment) and export (e.g. restart without touching database or exports)
 
 PYTHON="/mastr/.venv/bin/python3"
 
 MASTR_CACHE="/mastr/cache"
-MASTR_CACHE_ENRICHER="$MASTR_CACHE/enricher"
 MASTR_CACHE_DUMP="$MASTR_CACHE/dump"
 MASTR_DUMP_FILE="$MASTR_CACHE/mastr-latest.zip"
+# source URL and ETag of the downloaded dump: the zip may be imported later
+# (force mode, retry of a failed run) and the pipeline must report the date
+# and version of the dump it actually imported
+MASTR_DUMP_URL_FILE="$MASTR_DUMP_FILE.url"
+MASTR_DUMP_ETAG_FILE="$MASTR_DUMP_FILE.etag"
+# marks a completely extracted dump: an interrupted unzip must not be imported
+MASTR_DUMP_EXTRACTED_FILE="$MASTR_CACHE/dump.extracted"
+# ETag of the last dump that completed the whole pipeline
+ETAG_FILE="$MASTR_CACHE/etag.txt"
 
 # fall back to one process on single-core systems (nproc - 1 would be 0)
 MASTR_CONCURRENCY="${MASTR_CONCURRENCY:-$(( $(nproc) > 1 ? $(nproc) - 1 : 1 ))}"
@@ -99,26 +107,74 @@ check_ret_val() {
 }
 
 
+fetch_remote_info() {
+  # sets mastr_url and remote_etag, returns the exit code of get_mastr_url.py
+  # (0: new dump, 20: unchanged since the last successful pipeline run)
+  local info ret_val
+  info="$($PYTHON get_mastr_url.py --cache-dir "$MASTR_CACHE")"
+  ret_val=$?
+  mastr_url="$(sed -n 1p <<< "$info")"
+  remote_etag="$(sed -n 2p <<< "$info")"
+  return $ret_val
+}
+
+fetch_remote_info_or_exit() {
+  fetch_remote_info
+  local ret_val=$?
+  if [[ $ret_val -ne 0 && $ret_val -ne 20 ]] || [[ -z $mastr_url ]] ; then
+    check_ret_val 1 "error evaluating remote mastr version" "get_mastr_url.py returned $ret_val"
+  fi
+}
+
 mastr_download() {
+  # download to a temporary file: a failed or aborted transfer must not
+  # destroy the last good dump
+  local tmp_file
+  tmp_file="$MASTR_CACHE/.$(basename "$MASTR_DUMP_FILE").tmp-$$"
+  # remove downloads of interrupted runs (the pipeline is single-writer)
+  rm -f "$MASTR_CACHE/.$(basename "$MASTR_DUMP_FILE").tmp-"*
+
   wait_random 10
   log_info "download new mastr-dump ($mastr_url)"
-  out="$(curl --silent $mastr_url > $MASTR_DUMP_FILE 2>&1)"
-  check_ret_val $? "error while downloading $mastr_url" "$out"
+  # --fail: an HTTP error page must not be saved as dump
+  # --speed-limit/--speed-time: abort a stalled transfer (less than 1 KB/s for 5 minutes)
+  if ! curl --fail --silent --show-error --location \
+      --connect-timeout 60 --speed-limit 1024 --speed-time 300 --retry 3 --retry-delay 60 \
+      --output "$tmp_file" "$mastr_url" ; then
+    rm -f "$tmp_file"
+    check_ret_val 1 "error while downloading $mastr_url" "download failed"
+  fi
+  # a truncated transfer has no valid zip directory
+  if ! out="$(unzip -l "$tmp_file" 2>&1 > /dev/null)" ; then
+    rm -f "$tmp_file"
+    check_ret_val 1 "error while downloading $mastr_url" "downloaded file is no valid zip archive: $out"
+  fi
 
+  # erase the metadata and the extracted files of the old dump before the
+  # zip is replaced: an interrupted run must not import them as the new dump
   log_info "erase old dump files"
-  out="$(rm -f $MASTR_CACHE_DUMP/* 2>&1)"
-  check_ret_val $? "error while erasing old dump files" "$out"
+  out="$(rm -f "$MASTR_DUMP_URL_FILE" "$MASTR_DUMP_ETAG_FILE" "$MASTR_DUMP_EXTRACTED_FILE" $MASTR_CACHE_DUMP/* 2>&1)"
+  check_ret_val $? "error while erasing old dump files" "old dump files erased"
 
+  out="$(mv -f "$tmp_file" "$MASTR_DUMP_FILE" 2>&1)"
+  check_ret_val $? "error while moving the downloaded dump to $MASTR_DUMP_FILE" "dump downloaded to $MASTR_DUMP_FILE"
+
+  write_file_atomic "$mastr_url" "$MASTR_DUMP_URL_FILE" && write_file_atomic "$remote_etag" "$MASTR_DUMP_ETAG_FILE"
+  check_ret_val $? "error while writing the dump metadata" "dump metadata written"
 }
 
 mastr_extract_dump(){
 
-  if [ -z "$(ls -A $MASTR_CACHE_DUMP)" ] ; then
+  if [ ! -f "$MASTR_DUMP_EXTRACTED_FILE" ] ; then
     log_info "unzip dump $MASTR_DUMP_FILE"
+    # remove the remains of an interrupted unzip
+    out="$(rm -f $MASTR_CACHE_DUMP/* 2>&1)"
+    check_ret_val $? "error while erasing old dump files" "old dump files erased"
     out="$(unzip -qq $MASTR_DUMP_FILE -d $MASTR_CACHE_DUMP/ 2>&1)"
     check_ret_val $? "error while unzipping $MASTR_DUMP_FILE" "$out"
+    touch "$MASTR_DUMP_EXTRACTED_FILE"
   else
-    log_info "dump is already extracted, due to $MASTR_MASTR_CACHE_DUMP is not empty"
+    log_info "dump is already extracted to $MASTR_CACHE_DUMP"
   fi
 
 }
@@ -128,12 +184,6 @@ mastr_db_import() {
   log_info "import mastr-dump into database"
   $PYTHON import_mastr.py --cleanup --concurrency "$MASTR_CONCURRENCY" --cache-dir $MASTR_CACHE $MASTR_CACHE_DUMP
   check_ret_val $? "error while importing to database" ""
-}
-
-mastr_db_enrichment() {
-  log_info "enrich data in database"
-  $PYTHON enrich_mastr.py --concurrency "$MASTR_CONCURRENCY" --cache-dir $MASTR_CACHE_ENRICHER
-  check_ret_val $? "error while data enrichment" ""
 }
 
 mastr_csv_export() {
@@ -164,10 +214,9 @@ mastr_import() {
   wait_time 10 # wait for some db initialization tasks
   start=$(date +%s)
   if [[ $MASTR_SKIP_IMPORT_AND_EXPORT =~ ^(yes|true)$ ]] ; then
-    log_info "skip import, enrichment and export (MASTR_SKIP_IMPORT_AND_EXPORT is set)"
+    log_info "skip import and export (MASTR_SKIP_IMPORT_AND_EXPORT is set)"
   else
     mastr_db_import
-    mastr_db_enrichment
     mastr_csv_export
     mastr_db_dump
   fi
@@ -181,7 +230,7 @@ write_file_atomic() {
   local content="$1"
   local target="$2"
   local tmp_file
-  tmp_file="$EXPORT_DIR/.$(basename "$target").tmp-$$"
+  tmp_file="$(dirname "$target")/.$(basename "$target").tmp-$$"
 
   if printf '%s\n' "$content" > "$tmp_file" ; then
     mv -f "$tmp_file" "$target"
@@ -209,6 +258,24 @@ write_dump_date_file() {
   fi
 }
 
+finish_pipeline_run() {
+  # only reached after every pipeline step succeeded (check_ret_val exits on
+  # errors): storing the ETag earlier would skip the retry of a failed run
+  local dump_url dump_etag
+  dump_url="$(cat "$MASTR_DUMP_URL_FILE" 2>/dev/null)"
+  dump_etag="$(cat "$MASTR_DUMP_ETAG_FILE" 2>/dev/null)"
+
+  # fallback for a dump downloaded without metadata: the date of the current
+  # download URL (set by the caller) may be newer than the imported dump
+  write_dump_date_file "${dump_url:-$mastr_url}"
+
+  if [[ -n $dump_etag ]] ; then
+    log_info "write ETag of the imported dump ($dump_etag) to $ETAG_FILE"
+    write_file_atomic "$dump_etag" "$ETAG_FILE"
+    check_ret_val $? "error while writing $ETAG_FILE" "ETag written"
+  fi
+}
+
 check_env_vars() {
   ### check if required environment variables are set
   for env in "${REQUIRED_ENVS[@]}" ; do
@@ -217,7 +284,7 @@ check_env_vars() {
 }
 
 create_directories() {
-  for dir in $MASTR_CACHE_DUMP $MASTR_CACHE_ENRICHER $EXPORT_DIR ; do
+  for dir in $MASTR_CACHE_DUMP $EXPORT_DIR ; do
     create_directory $dir
   done
 }
@@ -229,41 +296,49 @@ create_directories
 # use already existing dump
 if [[ $MASTR_FORCE_USING_EXISTING_DUMP =~ ^(yes|true)$ ]]; then
   log_info "no check for newer MASTR dump, using existing dump or downloading if not existing"
-  mastr_url="$($PYTHON get_mastr_url.py --cache-dir $MASTR_CACHE 2>&1)"
   if [ ! -f $MASTR_DUMP_FILE ] ; then
     log_info "local dump not found, downloading current MASTR dump file"
+    fetch_remote_info_or_exit
     mastr_download
+  elif [ ! -s "$MASTR_DUMP_URL_FILE" ] ; then
+    log_info "source of $MASTR_DUMP_FILE is unknown (downloaded by an older version), the dump date is taken from the current download URL and may be wrong"
+    # not fatal: the existing dump can be imported without the download page
+    fetch_remote_info
+    [[ -z $mastr_url ]] && log_info "current download URL not available, the dump date is not updated"
   fi
   mastr_extract_dump
   mastr_import
-  write_dump_date_file "$mastr_url"
+  finish_pipeline_run
   exit
 fi
 
 # enforce download if no dump exists
 if [ ! -f $MASTR_DUMP_FILE ] ; then
   log_info "no local dump found, download current MASTR dump file"
-  mastr_url="$($PYTHON get_mastr_url.py --cache-dir $MASTR_CACHE 2>&1)"
+  fetch_remote_info_or_exit
   mastr_download
   mastr_extract_dump
   mastr_import
-  write_dump_date_file "$mastr_url"
+  finish_pipeline_run
   exit
 fi
 
-# only download and run pipeline, if remote file is newer than local one (using etag)
-mastr_url="$($PYTHON get_mastr_url.py --cache-dir $MASTR_CACHE)"
+# only download and run pipeline, if remote file is newer than the last
+# successfully imported one (using etag)
+fetch_remote_info
 ret_val=$?
 if [ $ret_val -eq 20 ] ; then
   log_info "MASTR source file has not been changed"
 elif [ $ret_val -eq 0 ] ; then
   create_directories
-  mastr_download
+  if [[ -n $remote_etag && "$(cat "$MASTR_DUMP_ETAG_FILE" 2>/dev/null)" == "$remote_etag" ]] ; then
+    log_info "dump $remote_etag is already downloaded, retrying the failed pipeline run"
+  else
+    mastr_download
+  fi
   mastr_extract_dump
   mastr_import
-  write_dump_date_file "$mastr_url"
+  finish_pipeline_run
 else
   log_err "--- Error evaluating remote mastr version---"
 fi
-
-#write_dump_date_file "$mastr_url"

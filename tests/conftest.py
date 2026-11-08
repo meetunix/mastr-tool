@@ -10,15 +10,15 @@ class FakeCursor:
 
     def __init__(self, connection):
         self.connection = connection
-        self.mogrify_calls = 0
         self.executed = []
-
-    def mogrify(self, statement, params):
-        self.mogrify_calls += 1
-        return b"statement"
+        self.copied_rows = []
 
     def execute(self, statement, params=None):
         self.executed.append(statement)
+
+    def copy_expert(self, sql, file):
+        self.executed.append(sql)
+        self.copied_rows += file.read().splitlines()
 
     def __enter__(self):
         return self

@@ -37,26 +37,66 @@ class TestGetFiles:
         assert len(result["EinheitenSolar"]) == 2
 
 
+def constraints_sql(tmp_path) -> str:
+    path = tmp_path / "constraints.sql"
+    import_mastr.create_constraints(path)
+    return path.read_text()
+
+
 class TestCreateSchema:
     def test_schema_contains_all_tables(self, tmp_path):
         path = tmp_path / "schema.sql"
         import_mastr.create_schema(path)
         schema = path.read_text()
         for entity in Einheiten:
-            assert f"create table if not exists {entity.name} (" in schema
+            assert f"create unlogged table if not exists {entity.name} (" in schema
 
     def test_schema_renders_constraints(self, tmp_path):
         path = tmp_path / "schema.sql"
         import_mastr.create_schema(path)
         schema = path.read_text()
         assert "EinheitMastrNummer" in schema
-        assert "PRIMARY KEY" in schema
         assert "NOT NULL" in schema
+        # primary keys and indices are built after the load
+        assert "PRIMARY KEY" not in schema
+        assert "CREATE INDEX" not in schema
 
-    def test_schema_contains_indices(self, tmp_path):
+    def test_autovacuum_is_disabled_during_the_import(self, tmp_path):
+        """Building the primary keys and indices after the load cancels a
+        running autovacuum, which Postgres logs as "ERROR: canceling
+        autovacuum task" - the tables are created without autovacuum."""
+        import re
+
         path = tmp_path / "schema.sql"
         import_mastr.create_schema(path)
-        schema = path.read_text()
+        tables = re.findall(r"create unlogged table if not exists \w+ \(.*?\n\)([^;]*);", path.read_text(), re.S)
+        assert len(tables) == len(Einheiten)
+        for options in tables:
+            assert options == " WITH (autovacuum_enabled = false, toast.autovacuum_enabled = false)"
+
+    def test_enable_autovacuum_resets_all_tables(self, monkeypatch):
+        connection = FakeConnection()
+        monkeypatch.setattr(import_mastr, "get_db_connection", lambda: connection)
+        import_mastr.enable_autovacuum()
+        executed = [statement for cursor in connection.cursors for statement in cursor.executed]
+        assert executed == [
+            f"ALTER TABLE {entity.name} RESET (autovacuum_enabled, toast.autovacuum_enabled)" for entity in Einheiten
+        ]
+        assert connection.commits == 1
+        assert connection.closed is True
+
+    def test_constraints_contain_all_primary_keys(self, tmp_path):
+        constraints = constraints_sql(tmp_path)
+        for entity in Einheiten:
+            primary_key = [c.name for c in entity.value if c.value.primary_key]
+            if primary_key:
+                assert f"ALTER TABLE {entity.name} ADD PRIMARY KEY ({', '.join(primary_key)});" in constraints
+                assert f"conrelid = '{entity.name}'::regclass AND contype = 'p'" in constraints
+            else:
+                assert f"ALTER TABLE {entity.name} " not in constraints
+
+    def test_schema_contains_indices(self, tmp_path):
+        schema = constraints_sql(tmp_path)
         assert "CREATE INDEX IF NOT EXISTS EinheitenWind_Bundesland_idx ON EinheitenWind(Bundesland);" in schema
         assert "CREATE INDEX IF NOT EXISTS Marktakteure_Personenart_idx ON Marktakteure(Personenart);" in schema
         assert (
@@ -73,9 +113,7 @@ class TestCreateSchema:
         CREATE INDEX."""
         from export_mastr import MastrType
 
-        path = tmp_path / "schema.sql"
-        import_mastr.create_schema(path)
-        schema = path.read_text()
+        schema = constraints_sql(tmp_path)
         for mastr_type in MastrType:
             table = mastr_type.value.entity.name
             assert f"ON {table}(Bundesland)" in schema, table
@@ -86,9 +124,7 @@ class TestCreateSchema:
         every table after the first - only EinheitenWind got an index."""
         import re
 
-        path = tmp_path / "schema.sql"
-        import_mastr.create_schema(path)
-        schema = path.read_text()
+        schema = constraints_sql(tmp_path)
         names = re.findall(r"CREATE INDEX IF NOT EXISTS (\S+?) ON", schema)
         assert len(names) == len(set(names)), "duplicate index names in schema"
 
@@ -139,7 +175,7 @@ class TestParseAndWriteXml:
         connection = connections[0]
         assert connection.closed is True
         # all 3 records reached the database layer
-        assert connection.cursors[0].mogrify_calls == 3
+        assert len(connection.cursors[0].copied_rows) == 3
         assert connection.commits >= 1
 
     def test_nv_rule_applies_during_import(self, tmp_path, monkeypatch):

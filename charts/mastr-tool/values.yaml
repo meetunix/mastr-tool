@@ -10,7 +10,7 @@ fullnameOverride: ""
 
 imagePullSecrets: []
 
-# --- mastr-tool (backend scheduler: download -> import -> enrich -> export) ---
+# --- mastr-tool (backend scheduler: download -> import incl. UTM enrichment -> export) ---
 mastrTool:
   image:
     repository: nachtsieb/mastr-tool
@@ -20,11 +20,12 @@ mastrTool:
     runAsUser: 1000
     runAsGroup: 1000
     fsGroup: 1000
-  # Force using an existing dump instead of downloading (one-shot pipeline run).
+  # Force using an existing dump instead of downloading (one-shot pipeline run;
+  # the pod stays idle afterwards instead of exiting, so it is not restarted).
   forceUsingExistingDump: false
-  # Skip database import, enrichment and export completely.
+  # Skip database import (incl. UTM enrichment) and export completely.
   skipImportAndExport: false
-  # Parallel processes for import, enrichment and export ("" = CPU cores minus one).
+  # Parallel processes for import and export ("" = CPU cores minus one).
   concurrency: ""
   # Extra env vars appended to the container.
   extraEnv: []
@@ -117,7 +118,7 @@ database:
 
 # --- persistence for cache + output (shared by mastr-tool and mastr-static) ---
 persistence:
-  # MASTR_CACHE_DIR: dump, extracted XML, enricher cache. Needs >= 70 GiB per README.
+  # MASTR_CACHE_DIR: dump, extracted XML. Needs >= 70 GiB per README.
   cache:
     size: 80Gi
     storageClassName: ""

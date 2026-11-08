@@ -35,7 +35,7 @@ XSD_ZIP_TIMEOUT_S = 60
 
 XS = "{http://www.w3.org/2001/XMLSchema}"
 
-# columns that only exist in the database (added by the enrichment step)
+# columns that only exist in the database (computed during the import)
 # and therefore have no counterpart in the XSD files
 DB_ONLY_COLUMNS = {"UTM_zone", "UTM_ost", "UTM_nord"}
 

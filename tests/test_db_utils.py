@@ -1,12 +1,13 @@
-"""Tests for the value conversion and the XML-to-row logic in db/db_utils.py."""
+"""Tests for the value conversion, the XML-to-row logic and the COPY writer
+in db/db_utils.py."""
 
 import xml.etree.ElementTree as ET
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 
 import pytest
 
-from db.db_utils import DBConverter, DBElementWriter
+from db.db_utils import DBConverter, DBElementWriter, to_copy_text
 from db.entities import Einheiten, Type
 
 
@@ -141,19 +142,61 @@ class TestGetValues:
         assert values["Weic"] is None
 
 
-class TestInsertStatement:
+class TestCopyStatement:
     def test_statement_shape_for_all_entities(self):
         for entity in Einheiten:
             writer = DBElementWriter(entity, connection=None)
-            statement = writer._DBElementWriter__get_sql_insert_statement()
-            assert statement.startswith(f"INSERT INTO {entity.name} (")
-            assert statement.count("%s") == len(list(entity.value)), entity.name
+            statement = writer.copy_statement
+            assert statement.startswith(f"COPY {entity.name} (")
+            assert statement.endswith(") FROM STDIN")
+            columns = statement[statement.index("(") + 1 : statement.index(")")].split(",")
+            assert columns == [c.name for c in entity.value], entity.name
 
     def test_statement_contains_nv_columns(self):
         writer = DBElementWriter(Einheiten.EinheitenWind, connection=None)
-        statement = writer._DBElementWriter__get_sql_insert_statement()
         for column in ("Hausnummer_nv", "Weic_nv", "Kraftwerksnummer_nv"):
-            assert column in statement
+            assert column in writer.copy_statement
+
+
+class TestCopyText:
+    """Values are rendered in COPY's text format: tab separated, NULL as \\N,
+    backslash, newline, carriage return and tab escaped."""
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (None, "\\N"),
+            ("", ""),
+            ("plain", "plain"),
+            ("tab\there", "tab\\there"),
+            ("line1\nline2", "line1\\nline2"),
+            ("cr\rlf", "cr\\rlf"),
+            ("back\\slash", "back\\\\slash"),
+            ("\\N", "\\\\N"),  # the text "\N" must not become NULL
+            ('quote"d,comma', 'quote"d,comma'),
+            (True, "t"),
+            (False, "f"),
+            (42, "42"),
+            (Decimal("12.50"), "12.50"),
+            (391234.5678901234, "391234.5678901234"),
+            (float("inf"), "inf"),
+            (date(2024, 1, 31), "2024-01-31"),
+            (datetime(2019, 7, 18, 9, 31, 5, 551321), "2019-07-18T09:31:05.551321"),
+        ],
+    )
+    def test_values(self, value, expected):
+        assert to_copy_text(value) == expected
+
+    def test_timestamp_with_offset_is_converted_to_utc(self):
+        value = datetime(2024, 1, 1, 12, 0, tzinfo=timezone(timedelta(hours=1)))
+        assert to_copy_text(value) == "2024-01-01T11:00:00"
+
+
+def copied_values(connection, entity):
+    """The copied rows of the fake connection as dicts (raw COPY text)."""
+    names = [c.name for c in entity.value]
+    rows = [row for cursor in connection.cursors for row in cursor.copied_rows]
+    return [dict(zip(names, row.split("\t"))) for row in rows]
 
 
 class TestBatching:
@@ -169,15 +212,66 @@ class TestBatching:
         for _ in range(5):
             writer.write(ET.fromstring(record))
 
-        def mogrified_records():
-            return sum(cursor.mogrify_calls for cursor in connection.cursors)
-
         # 5 records with batch limit 3: one flush of 3 happened so far
-        assert mogrified_records() == 3
+        assert len(copied_values(connection, Einheiten.Katalogwerte)) == 3
         assert connection.commits == 1
 
         writer.cleanup()
         # cleanup flushes the remaining 2 and closes the connection
-        assert mogrified_records() == 5
+        assert copied_values(connection, Einheiten.Katalogwerte) == [{"Id": "1", "Wert": "x", "KatalogKategorieId": "2"}] * 5
         assert connection.commits == 2
         assert connection.closed is True
+
+    def test_empty_batch_is_not_copied(self):
+        from tests.conftest import FakeConnection
+
+        connection = FakeConnection()
+        DBElementWriter(Einheiten.Katalogwerte, connection).cleanup()
+        assert connection.cursors == []
+        assert connection.closed is True
+
+
+class TestUtmEnrichment:
+    """Units with geo coordinates get their UTM coordinates during the import
+    (identical to CoordinateConverter.geo_to_utm)."""
+
+    def write_wind(self, records):
+        from tests.conftest import FakeConnection
+
+        connection = FakeConnection()
+        writer = DBElementWriter(Einheiten.EinheitenWind, connection)
+        for i, coordinates in enumerate(records):
+            writer.write(
+                ET.fromstring(
+                    f"<EinheitWind><EinheitMastrNummer>SEE{i}</EinheitMastrNummer>"
+                    f"<DatumLetzteAktualisierung>2024-01-01T00:00:00</DatumLetzteAktualisierung>"
+                    f"{coordinates}</EinheitWind>"
+                )
+            )
+        writer.cleanup()
+        return copied_values(connection, Einheiten.EinheitenWind)
+
+    def test_utm_columns_are_filled(self):
+        from enricher.enricher import CoordinateConverter
+
+        rows = self.write_wind(
+            [
+                "<Breitengrad>52.516275</Breitengrad><Laengengrad>13.377704</Laengengrad>",
+                "<Breitengrad>50.0</Breitengrad><Laengengrad>6.0</Laengengrad>",
+            ]
+        )
+        for row, (lat, lon) in zip(rows, [("52.516275", "13.377704"), ("50.0", "6.0")]):
+            utm = CoordinateConverter().geo_to_utm(Decimal(lat), Decimal(lon))
+            assert row["UTM_zone"] == str(utm.zone)
+            assert row["UTM_ost"] == repr(utm.easting)
+            assert row["UTM_nord"] == repr(utm.northing)
+        assert [row["UTM_zone"] for row in rows] == ["33", "32"]
+
+    def test_rows_without_coordinates_stay_null(self):
+        rows = self.write_wind(["<Breitengrad>52.5</Breitengrad>", "<Laengengrad>13.4</Laengengrad>", ""])
+        for row in rows:
+            assert (row["UTM_zone"], row["UTM_ost"], row["UTM_nord"]) == ("\\N", "\\N", "\\N")
+
+    def test_entities_without_coordinates_are_not_enriched(self):
+        writer = DBElementWriter(Einheiten.Marktakteure, connection=None)
+        assert writer._DBElementWriter__utm_enricher is None

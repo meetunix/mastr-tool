@@ -17,11 +17,29 @@ _is_running = False
 _lock = threading.Lock()
 _shutdown = False
 
+PIPELINE_TIMEOUT_S = 14400
+# docker stop waits 10 s and Kubernetes 30 s before killing the container
+SHUTDOWN_GRACE_PERIOD_S = 5
+
 
 def signal_handler(sig, frame):
     global _shutdown
     logger.info(f"Received signal {sig}, shutting down gracefully...")
     _shutdown = True
+
+
+def _terminate_process_group(process: subprocess.Popen, grace_period: float) -> None:
+    """Terminate the script and all its children (the whole process group)."""
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        process.wait(timeout=grace_period)
+    except (ProcessLookupError, subprocess.TimeoutExpired):
+        # Process already dead or still hanging; force kill
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            process.wait(timeout=10)
+        except ProcessLookupError:
+            pass
 
 
 def run_mastr_download() -> bool:
@@ -36,6 +54,9 @@ def run_mastr_download() -> bool:
 
     start_time = time.time()
     try:
+        if _shutdown:
+            return False
+
         logger.info("Starting MASTR download script")
 
         script_path = "/mastr/download-mastr.sh"
@@ -50,31 +71,28 @@ def run_mastr_download() -> bool:
             preexec_fn=os.setsid  # Unix: create new process group
         )
 
-        # Wait with timeout
-        try:
-            process.communicate(timeout=14400)
-            duration = time.time() - start_time
-            if process.returncode == 0:
-                logger.info(f"MASTR download script completed successfully in {duration:.2f}s")
-                return True
-            logger.error(
-                f"MASTR download script failed with return code {process.returncode} after {duration:.2f}s"
-            )
-            return False
-        except subprocess.TimeoutExpired:
-            # Kill the entire process group (parent + all children)
+        # The script runs in its own session and does not receive the
+        # container's SIGTERM: wait in short steps and forward a shutdown
+        while True:
             try:
-                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                process.wait(timeout=30)
-            except (ProcessLookupError, subprocess.TimeoutExpired):
-                # Process already dead or still hanging; force kill
-                try:
-                    os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                    process.wait(timeout=10)
-                except ProcessLookupError:
-                    pass
-            logger.error("MASTR download script timed out after 4 hours")
-            return False
+                process.wait(timeout=1)
+                break
+            except subprocess.TimeoutExpired:
+                if _shutdown:
+                    logger.info("Terminating MASTR download script due to shutdown")
+                    _terminate_process_group(process, SHUTDOWN_GRACE_PERIOD_S)
+                    return False
+                if time.time() - start_time >= PIPELINE_TIMEOUT_S:
+                    _terminate_process_group(process, 30)
+                    logger.error("MASTR download script timed out after 4 hours")
+                    return False
+
+        duration = time.time() - start_time
+        if process.returncode == 0:
+            logger.info(f"MASTR download script completed successfully in {duration:.2f}s")
+            return True
+        logger.error(f"MASTR download script failed with return code {process.returncode} after {duration:.2f}s")
+        return False
     except Exception as e:
         logger.error(f"Error running MASTR download script: {e}")
         return False
@@ -96,12 +114,18 @@ def main():
     if _force_using_existing_dump():
         logger.info("MASTR_FORCE_USING_EXISTING_DUMP is set, running pipeline once without scheduling")
         success = run_mastr_download()
-        if success:
-            logger.info("Pipeline run complete, exiting (no recurring schedule)")
-            return
-        # exit non-zero so restart policies like "on-failure" can react
-        logger.error("Pipeline run failed")
-        sys.exit(1)
+        if not success:
+            # exit non-zero so the restart policy retries the run
+            logger.error("Pipeline run failed")
+            sys.exit(1)
+        # stay idle instead of exiting: restart policies like
+        # "unless-stopped" (compose) or a Deployment would otherwise start
+        # the whole pipeline over and over again
+        logger.info("Pipeline run complete, waiting idle until shutdown (no recurring schedule)")
+        while not _shutdown:
+            time.sleep(1)
+        logger.info("Scheduler shutdown complete")
+        return
 
     schedule.every(30).minutes.do(run_mastr_download)
 

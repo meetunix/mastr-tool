@@ -1,10 +1,14 @@
 """Tests for the enricher: coordinate conversion with known values and the
-cache roundtrip. No fixture files are needed - coordinates are well-known
-constants and the cache is exercised with temporary files.
+batch conversion used by the import. No fixture files are needed -
+coordinates are well-known constants.
 """
 
-from enricher.cache import Cache
-from enricher.enricher import CoordinateConverter
+import random
+from decimal import Decimal
+
+import pyproj
+
+from enricher.enricher import UTM, CoordinateConverter
 
 
 class TestGeoToUtm:
@@ -34,52 +38,28 @@ class TestGeoToGaussKrueger:
         assert 5_000_000 < gk.northing < 6_000_000
 
 
-class TestCache:
-    def test_set_get_contains_len(self):
-        cache = Cache()
-        assert cache.set("a", 1) is True
-        assert cache.get("a") == 1
-        assert "a" in cache
-        assert len(cache) == 1
-        assert cache.get("missing", "default") == "default"
+class TestGeoToUtmBatch:
+    def reference(self, lat, lon) -> UTM:
+        """The original per-point conversion (new CRS and transformer per call)."""
+        zone = int((lon + 180) / 6) + 1
+        utm_crs = pyproj.CRS(f"+proj=utm +zone={zone} +datum=WGS84 +units=m +no_defs")
+        transformer = pyproj.Transformer.from_crs(pyproj.CRS.from_epsg(4326), utm_crs, always_xy=True)
+        easting, northing = transformer.transform(lon, lat)
+        return UTM(zone=zone, easting=easting, northing=northing)
 
-    def test_delete_and_clear(self):
-        cache = Cache()
-        cache.set("a", 1)
-        assert cache.delete("a") is True
-        assert cache.delete("a") is False
-        cache.set("b", 2)
-        cache.clear()
-        assert len(cache) == 0
+    def test_batch_is_identical_to_per_point_conversion(self):
+        rnd = random.Random(1)
+        points = [(Decimal(f"{rnd.uniform(47, 55):.7f}"), Decimal(f"{rnd.uniform(5, 16):.7f}")) for _ in range(500)]
+        # zone boundaries
+        points += [(Decimal("50"), Decimal(lon)) for lon in ("6", "5.9999999", "12.0000000", "11.9999999", "18")]
+        result = CoordinateConverter().geo_to_utm_batch([p[0] for p in points], [p[1] for p in points])
+        assert result == [self.reference(lat, lon) for lat, lon in points]
 
-    def test_max_size_rejects_new_keys(self):
-        cache = Cache(max_size=2)
-        assert cache.set("a", 1) is True
-        assert cache.set("b", 2) is True
-        assert cache.set("c", 3) is False  # full and new
-        assert cache.set("a", 10) is True  # existing key still allowed
+    def test_empty_batch(self):
+        assert CoordinateConverter().geo_to_utm_batch([], []) == []
 
-    def test_store_load_roundtrip(self, tmp_path):
-        cache = Cache()
-        cache.set((52.5, 13.4), "utm-33")
-        cache_file = tmp_path / "enricher_cache.pkl"
-        cache.store(cache_file)
-
-        loaded = Cache.load(cache_file)
-        assert loaded.get((52.5, 13.4)) == "utm-33"
-
-    def test_load_missing_file_returns_empty_cache(self, tmp_path):
-        loaded = Cache.load(tmp_path / "does-not-exist.pkl")
-        assert len(loaded) == 0
-
-    def test_load_empty_file_returns_empty_cache(self, tmp_path):
-        cache_file = tmp_path / "empty.pkl"
-        cache_file.write_bytes(b"")
-        loaded = Cache.load(cache_file)
-        assert len(loaded) == 0
-
-    def test_load_corrupted_file_returns_empty_cache(self, tmp_path):
-        cache_file = tmp_path / "corrupt.pkl"
-        cache_file.write_bytes(b"this is not a pickle")
-        loaded = Cache.load(cache_file)
-        assert len(loaded) == 0
+    def test_one_transformer_per_zone(self):
+        converter = CoordinateConverter()
+        converter.geo_to_utm_batch([50.0, 51.0, 52.0], [7.0, 8.0, 13.0])
+        converter.geo_to_utm(53.0, 9.0)
+        assert sorted(converter._utm_transformers) == [32, 33]

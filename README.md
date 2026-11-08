@@ -11,8 +11,12 @@ die Einheiten der zwölf Energieträger (Wind, Solar, Biomasse, Wasser, Geotherm
 Stromspeicher, Kernkraft, Verbrennung, Gaserzeuger, Gasspeicher, Gasverbraucher, Stromverbraucher) werden in andere
 Formate konvertiert. Der komplette Datenbankauszug steht nach der Konvertierung ebenfalls zum Download bereit
 (Datei `mastr-latest.sql`: zstd-komprimiertes `pg_dump`-Archiv im Custom-Format, Einspielen mit `pg_restore`,
-mindestens PostgreSQL 16). Im Anreicherungsschritt werden derzeit die GEO-Koordinaten (Längen-, Breitengrad)
+mindestens PostgreSQL 16). Beim Import werden derzeit die GEO-Koordinaten (Längen-, Breitengrad)
 zusätzlich um UTM-Koordinaten erweitert, sodass 3 neue Spalten hinzugefügt werden: `utm_zone, utm_ost, utm_nord`.
+
+Die Tabellen werden bei jedem Import aus dem Dump neu aufgebaut und sind deshalb `UNLOGGED` (kein WAL beim Import):
+Nach einem Absturz des Datenbankservers sind sie bis zum nächsten Import leer, und `pg_restore` legt sie ebenfalls als
+`UNLOGGED` an.
 
 Wenn man nur die den aktuellen Stand des Marktstammdatenregisters konvertieren, Anreichern und die Daten im Anschluss
 über http://localhost:8080 herunterladen möchte, reicht mastr-tool aus. Die WebUI mastr-app ist nicht notwendig.
@@ -33,15 +37,15 @@ geteilt:
 #### Die Pipeline im Detail
 
 1. **Dump-Download**: Der Scheduler prüft alle 30 Minuten, ob ein aktualisierter MaStR-Dump bei der Bundesnetzagentur
-   vorliegt. Nur dann wird neu heruntergeladen und die Konvertierung durchgeführt.
-2. **DB-Import**: Die riesigen XML-Dateien des Dumps werden in PostgreSQL importiert.
-3. **Enrichment**: Für alle Einheiten mit Koordinaten werden UTM-Koordinaten berechnet und in der Datenbank ergänzt
-   (Zone, Ostwert, Nordwert). Bereits berechnete Koordinaten werden zwischengespeichert, um Rechenzeit bei zukünftigen
-   Konvertierungen zu sparen.
-4. **Export**: Die angereicherten Daten werden konvertiert in:
+   vorliegt. Nur dann wird neu heruntergeladen und die Konvertierung durchgeführt. Ein Dump gilt erst als verarbeitet,
+   wenn die komplette Pipeline erfolgreich war – ein fehlgeschlagener Lauf wird bei der nächsten Prüfung wiederholt
+   (ohne erneuten Download).
+2. **DB-Import mit Enrichment**: Die riesigen XML-Dateien des Dumps werden in PostgreSQL importiert. Dabei werden für
+   alle Einheiten mit Koordinaten UTM-Koordinaten berechnet (Zone, Ostwert, Nordwert).
+3. **Export**: Die angereicherten Daten werden konvertiert in:
     - **CSV**
     - **Parquet**
-    - **Excel** (`.xlsx`, nicht für Solar und Stromspeicher, da zu groß)
+    - **Excel** (`.xlsx`, nicht für Solar und Stromspeicher, da zu groß; Zahlen und Datumswerte als typisierte Zellen)
 
 ### Voraussetzungen
 
@@ -54,19 +58,19 @@ geteilt:
 Man legt eine `.env` neben der `docker-compose.yaml` an:
 
 ```env
-# Cache-Verzeichnis (Dump, entpackte XML-Dateien, Enricher-Cache)
+# Cache-Verzeichnis (Dump, entpackte XML-Dateien)
 MASTR_CACHE_DIR=/pfad/zum/cache
 
 # Export-Verzeichnis (CSV-, Parquet- und Excel-Exporte)
 MASTR_OUTPUT_DIR=/pfad/zum/export
 
-# Anzahl paralleler Prozesse für Import, Anreicherung und Export (leer = CPU-Kerne minus eins)
+# Anzahl paralleler Prozesse für Import und Export (leer = CPU-Kerne minus eins)
 MASTR_CONCURRENCY=
 
-# Vorhandenen Dump ohne Download-Prüfung verwenden (einmaliger Pipeline-Lauf, Container endet danach)
+# Vorhandenen Dump ohne Download-Prüfung verwenden (einmaliger Pipeline-Lauf, Container bleibt danach im Leerlauf)
 MASTR_FORCE_USING_EXISTING_DUMP=false
 
-# Import, Anreicherung und Export komplett überspringen (z.B. Neustart ohne Datenbank- oder Export-Änderungen)
+# Import (inkl. Anreicherung) und Export komplett überspringen (z.B. Neustart ohne Datenbank- oder Export-Änderungen)
 MASTR_SKIP_IMPORT_AND_EXPORT=false
 ```
 

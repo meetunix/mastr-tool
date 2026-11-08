@@ -1,4 +1,6 @@
+from collections import defaultdict
 from dataclasses import dataclass
+from typing import Sequence
 
 import pyproj
 
@@ -22,22 +24,42 @@ class CoordinateConverter:
     def __init__(self):
         # Define common coordinate systems
         self.wgs84 = pyproj.CRS.from_epsg(4326)  # Standard WGS84 (lat/lon)
+        # building a transformer costs ~200 µs, the transformation itself
+        # less than 1 µs per point - one transformer per zone is reused
+        self._utm_transformers: dict[int, pyproj.Transformer] = {}
+
+    @staticmethod
+    def utm_zone(lon) -> int:
+        """Determine the UTM zone based on longitude"""
+        return int((lon + 180) / 6) + 1
+
+    def _utm_transformer(self, zone_number: int) -> pyproj.Transformer:
+        transformer = self._utm_transformers.get(zone_number)
+        if transformer is None:
+            utm_crs = pyproj.CRS(f"+proj=utm +zone={zone_number} +datum=WGS84 +units=m +no_defs")
+            transformer = pyproj.Transformer.from_crs(self.wgs84, utm_crs, always_xy=True)
+            self._utm_transformers[zone_number] = transformer
+        return transformer
 
     def geo_to_utm(self, lat, lon) -> UTM:
         """Convert latitude/longitude to UTM coordinates"""
-        # Determine the UTM zone based on longitude
-        zone_number = int((lon + 180) / 6) + 1
+        return self.geo_to_utm_batch([lat], [lon])[0]
 
-        # Create the appropriate UTM projection
-        utm_crs = pyproj.CRS(f"+proj=utm +zone={zone_number} +datum=WGS84 +units=m +no_defs")
+    def geo_to_utm_batch(self, lats: Sequence, lons: Sequence) -> list[UTM]:
+        """Convert many latitude/longitude pairs to UTM coordinates: one
+        vectorised transformation per UTM zone instead of one call per point."""
+        indices_by_zone: dict[int, list[int]] = defaultdict(list)
+        for i, lon in enumerate(lons):
+            indices_by_zone[self.utm_zone(lon)].append(i)
 
-        # Create transformer
-        transformer = pyproj.Transformer.from_crs(self.wgs84, utm_crs, always_xy=True)
-
-        # Transform coordinates
-        easting, northing = transformer.transform(lon, lat)
-
-        return UTM(zone=zone_number, easting=easting, northing=northing)
+        result: list[UTM | None] = [None] * len(lons)
+        for zone_number, indices in indices_by_zone.items():
+            eastings, northings = self._utm_transformer(zone_number).transform(
+                [float(lons[i]) for i in indices], [float(lats[i]) for i in indices]
+            )
+            for i, easting, northing in zip(indices, eastings, northings):
+                result[i] = UTM(zone=zone_number, easting=easting, northing=northing)
+        return result
 
     def geo_to_gauss_kruger(self, lat, lon) -> GaussKrueger:
         """Convert latitude/longitude to Gauss-Krüger (Potsdam) coordinates"""

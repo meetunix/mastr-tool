@@ -10,7 +10,7 @@ import polars as pl
 import pytest
 from openpyxl import load_workbook
 
-from db.entities import Einheiten, Marktakteur, Type
+from db.entities import Einheiten, Marktakteur, SelectUDFs, Type
 from db.polars_schema import build_polars_schema
 from export_mastr import (
     ConvertExportJob,
@@ -73,11 +73,28 @@ class TestSelectStatements:
 
     def test_udfs_are_applied(self):
         statement = build_exporter().select_stmts[MastrType.WIND]
-        assert "katalog(EinheitenWind.Land) Land," in statement
         assert "boolean_hr(EinheitenWind.FernsteuerbarkeitNb) FernsteuerbarkeitNb," in statement
+        assert "marktfunktion(Marktakteure.Marktfunktion) Marktakteur_Marktfunktion," in statement
         assert "katalog_list(EinheitenSolar.ZusaetzlicheMerkmaleDerFlaecheUndDerAktuellenFlaechennutzung)" in (
             build_exporter().select_stmts[MastrType.SOLAR]
         )
+
+    @pytest.mark.parametrize("mastr_type", list(MastrType))
+    def test_catalog_values_are_resolved_by_joins(self, mastr_type):
+        """Every catalog column gets its own LEFT JOIN on katalogwerte
+        instead of a katalog() call per row."""
+        import re
+
+        statement = build_exporter().select_stmts[mastr_type]
+        table = mastr_type.value.entity.name
+        assert "katalog(" not in statement
+
+        selected = dict(re.findall(r"^\t(katalog_\d+)\.Wert (\w+),?$", statement, re.M))
+        joined = dict(re.findall(r"^LEFT JOIN Katalogwerte (katalog_\d+) ON katalog_\d+\.Id = (\S+) ?$", statement, re.M))
+        expected = {f"{table}.{c.name}": c.name for c in mastr_type.value.entity.value if c.value.udf is SelectUDFs.Katalog}
+        expected |= {f"Marktakteure.{c.name}": f"Marktakteur_{c.name}" for c in Marktakteur if c.value.udf is SelectUDFs.Katalog}
+        assert {joined[alias]: name for alias, name in selected.items()} == expected
+        assert len(joined) == len(expected)
 
     def test_join_condition(self):
         for mastr_type in MastrType:
@@ -167,12 +184,54 @@ class TestFileConversion:
         excel_path = tmp_path / "solar.xlsx"
         write_csv_with_schema(csv_path, schema, rows=3)
 
-        job = ConvertExportJob(name="solar", file_output_path=excel_path, csv_source_file=csv_path)
+        job = ConvertExportJob(name="solar", file_output_path=excel_path, csv_source_file=csv_path, schema=schema)
         write_excel_parallel(job)
 
         workbook = load_workbook(excel_path)
         sheet = workbook.active
         assert sheet.max_row == 4  # header + 3 data rows
+
+    def test_excel_header_is_the_csv_header(self, tmp_path):
+        """Regression: the header comes from the CSV (lower case names from
+        COPY), not from the polars schema - as before the typed export."""
+        schema = build_polars_schema(Einheiten.EinheitenWind)
+        csv_path = tmp_path / "wind.csv"
+        excel_path = tmp_path / "wind.xlsx"
+        write_csv_with_schema(csv_path, schema, rows=1)
+        header = [name.lower() for name in schema]
+        lines = csv_path.read_text(encoding="utf-8").splitlines()
+        csv_path.write_text("\n".join([",".join(header)] + lines[1:]) + "\n", encoding="utf-8")
+
+        job = ConvertExportJob(name="wind", file_output_path=excel_path, csv_source_file=csv_path, schema=schema)
+        write_excel_parallel(job)
+
+        assert [cell.value for cell in load_workbook(excel_path).active[1]] == header
+
+    def test_excel_cells_are_typed(self, tmp_path):
+        """Numbers, dates and timestamps are written as numeric/date cells,
+        not as text (Excel: "number stored as text", no sums or sorting)."""
+        from datetime import datetime
+
+        schema = {"Name": pl.String, "Anzahl": pl.Int64, "Leistung": pl.Float64, "Datum": pl.Date, "Zeit": pl.Datetime}
+        csv_path = tmp_path / "typed.csv"
+        excel_path = tmp_path / "typed.xlsx"
+        # as written by Postgres' COPY ... (FORMAT CSV)
+        csv_path.write_text(
+            "Name,Anzahl,Leistung,Datum,Zeit\n"
+            '"a, b",3,12.50,2024-01-31,2019-07-18 09:31:05.551\n'
+            ",,,,\n"
+            "c,7,Infinity,2020-02-29,2024-01-01 00:00:00\n",
+            encoding="utf-8",
+        )
+        job = ConvertExportJob(name="typed", file_output_path=excel_path, csv_source_file=csv_path, schema=schema)
+        write_excel_parallel(job)
+
+        rows = list(load_workbook(excel_path).active.iter_rows(values_only=True))
+        assert rows[0] == ("Name", "Anzahl", "Leistung", "Datum", "Zeit")
+        assert rows[1] == ("a, b", 3, 12.5, datetime(2024, 1, 31), datetime(2019, 7, 18, 9, 31, 5, 551000))
+        assert rows[2] == (None, None, None, None, None)
+        # Excel has no infinity: the cell stays empty
+        assert rows[3] == ("c", 7, None, datetime(2020, 2, 29), datetime(2024, 1, 1))
 
     def test_excel_uses_the_sheet_title_not_the_job_name(self, tmp_path):
         """Regression: the sheet title used to be the job name (the file
@@ -189,6 +248,7 @@ class TestFileConversion:
             name="geothermie_grubengas_druckentspannung_mecklenburg-vorpommern",
             file_output_path=excel_path,
             csv_source_file=csv_path,
+            schema=schema,
             sheet_title="Geothermie",
         )
         with warnings.catch_warnings():
@@ -214,7 +274,9 @@ class TestAtomicExportWrites:
         excel_path = tmp_path / "solar.xlsx"
         write_csv_with_schema(csv_path, schema, rows=2)
 
-        write_excel_parallel(ConvertExportJob(name="solar", file_output_path=excel_path, csv_source_file=csv_path))
+        write_excel_parallel(
+            ConvertExportJob(name="solar", file_output_path=excel_path, csv_source_file=csv_path, schema=schema)
+        )
 
         assert excel_path.exists()
         self.assert_no_temp_files(tmp_path)

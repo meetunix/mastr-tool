@@ -2,7 +2,7 @@
 import argparse
 import time
 from dataclasses import dataclass
-from multiprocessing import Pool
+from multiprocessing import get_context
 from pathlib import Path
 from typing import Optional
 
@@ -149,19 +149,37 @@ class MastrExporter:
         """
         return {wert: state_id for wert, state_id in self.__query_db(stmt)}
 
-    def __market_fields(self) -> str:
+    @staticmethod
+    def __udf_field(column, column_name: str, katalog_joins: list[str]) -> Optional[str]:
+        """SQL expression of a column with UDF, None for a plain column.
+
+        Catalog values are resolved with a LEFT JOIN on katalogwerte (same
+        result as katalog(): NULL for unknown IDs): the planner runs it as a
+        hash join, while the function is called - and runs its own index
+        lookup - once per row and column."""
+        udf = column.value.udf
+        if udf is None:
+            return None
+        if udf is SelectUDFs.Katalog:
+            katalog_alias = f"katalog_{len(katalog_joins)}"
+            katalog_joins.append(
+                f"LEFT JOIN {Einheiten.Katalogwerte.name} {katalog_alias} "
+                f"ON {katalog_alias}.{Katalogwert.Id.name} = {column_name}"
+            )
+            return f"{katalog_alias}.{Katalogwert.Wert.name}"
+        return udf.value.replace("{{field}}", column_name)
+
+    def __market_fields(self, katalog_joins: list[str]) -> str:
         columns = ""
         table_name = Einheiten.Marktakteure.name
         for column in Marktakteur:
             column_name = f"{table_name}.{column.name}"
-            udf = column.value.udf
             # prefix the operator columns to disambiguate them from main entity
             # columns with the same name (Land, Bundesland, Strasse, ...)
             alias = f"Marktakteur_{column.name}"
-            if udf:
-                udf: str = udf.value
-                udf = udf.replace("{{field}}", column_name)
-                columns += f"\t{udf} {alias},\n"
+            field = self.__udf_field(column, column_name, katalog_joins)
+            if field:
+                columns += f"\t{field} {alias},\n"
             else:
                 columns += f"\t{column_name} {alias},\n"
 
@@ -174,25 +192,25 @@ class MastrExporter:
             main_table = main_entity.value
             table_name = main_entity.name
             columns = ""
+            katalog_joins: list[str] = []
             for column in main_table:
                 column_name = f"{table_name}.{column.name}"
-                udf = column.value.udf
-                if udf:
-                    udf: str = udf.value
-                    udf = udf.replace("{{field}}", column_name)
-                    columns += f"\t{udf} {column.name},\n"
+                field = self.__udf_field(column, column_name, katalog_joins)
+                if field:
+                    columns += f"\t{field} {column.name},\n"
                 else:
                     columns += f"\t{column_name},\n"
 
-            columns += self.__market_fields()
+            columns += self.__market_fields(katalog_joins)
             # erase last hyphen and linebreak
             columns = columns[:-2]
             stmt = (
                 f"SELECT\n{columns}\nFROM {main_entity.name}\n"
                 f"LEFT JOIN {Einheiten.Marktakteure.name} "
                 f"ON {main_entity.name}.{main_table.AnlagenbetreiberMastrNummer.name} "
-                f"= {Einheiten.Marktakteure.name}.{Marktakteur.MastrNummer.name} "
+                f"= {Einheiten.Marktakteure.name}.{Marktakteur.MastrNummer.name}\n"
             )
+            stmt += "\n".join(katalog_joins) + " "
 
             # print(stmt)
             self.select_stmts[mastr_type] = stmt
@@ -265,6 +283,7 @@ class MastrExporter:
             if mastr_option.states:
                 csv_files += self.csv_files_states[type]
 
+            schema = build_polars_schema(mastr_option.entity)
             for csv_path in csv_files:
                 file_descr = ".".join(csv_path.name.split(".")[:-1])
                 excel_path = csv_path.parent / Path(file_descr + ".xlsx")
@@ -272,6 +291,7 @@ class MastrExporter:
                     name=file_descr,
                     file_output_path=excel_path,
                     csv_source_file=csv_path,
+                    schema=schema,
                     sheet_title=mastr_option.sheet_title,
                 )
                 excel_jobs.append(job)
@@ -335,6 +355,19 @@ def write_csv_parallel(job: CsvExportJob) -> None:
         conn.close()
 
 
+def scan_export_csv(job: ConvertExportJob) -> pl.LazyFrame:
+    # has_header=False + skip_rows=1: column names and dtypes are taken from
+    # the supplied schema, which is the single source of truth shared with the
+    # CSV/Excel export (identical, unique column names).
+    return pl.scan_csv(
+        job.csv_source_file,
+        has_header=False,
+        skip_rows=1,
+        schema=job.schema,
+        try_parse_dates=True,
+    )
+
+
 def write_excel_parallel(job: ConvertExportJob) -> None:
     import csv
     from openpyxl import Workbook
@@ -344,30 +377,31 @@ def write_excel_parallel(job: ConvertExportJob) -> None:
     # job name (file descriptor) is often longer and only used for logging
     ws = wb.create_sheet(job.sheet_title)
 
-    with open(job.csv_source_file, 'r', encoding='utf-8') as f:
-        reader = csv.reader(f)
-        for row in reader:
-            ws.append(row)
+    # header as in the CSV file (lower case column names from COPY)
+    with open(job.csv_source_file, "r", encoding="utf-8", newline="") as f:
+        ws.append(next(csv.reader(f)))
+
+    # typed like the Parquet export: numbers, dates and timestamps become
+    # numeric/date cells instead of text. Excel has no NaN/infinity - such
+    # values become empty cells.
+    floats = pl.col(pl.Float64)
+    df = scan_export_csv(job).with_columns(pl.when(floats.is_finite()).then(floats).name.keep()).collect()
+    for row in df.iter_rows():
+        ws.append(row)
 
     atomic_write(job.file_output_path, wb.save)
 
 
 def write_parquet_parallel(job: ConvertExportJob) -> None:
-    # has_header=False + skip_rows=1: column names and dtypes are taken from
-    # the supplied schema, which is the single source of truth shared with the
-    # CSV/Excel export (identical, unique column names).
-    df = pl.scan_csv(
-        job.csv_source_file,
-        has_header=False,
-        skip_rows=1,
-        schema=job.schema,
-        try_parse_dates=True,
-    )
+    df = scan_export_csv(job)
     atomic_write(job.file_output_path, lambda temp_path: df.sink_parquet(temp_path, compression="zstd"))
 
 
 def execute_jobs_in_parallel(concurrency: int, func, jobs: list[ExportJob]) -> None:
-    with Pool(processes=concurrency) as pool:
+    # forkserver on every Python version: polars is already running threads
+    # in this process, and "fork" (the Linux default up to Python 3.13)
+    # can deadlock a child that inherits a lock held by one of them
+    with get_context("forkserver").Pool(processes=concurrency) as pool:
         processes = []
         for job in jobs:
             processes.append(pool.apply_async(func, (job,)))

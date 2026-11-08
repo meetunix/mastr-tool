@@ -5,14 +5,14 @@ services:
     image: mastr-tool:latest
     build: .
     container_name: mastr-tool
-    # "on-failure": a successful one-shot run (MASTR_FORCE_USING_EXISTING_DUMP)
-    # exits with code 0 and must not be restarted; failures are retried
+    # a successful one-shot run (MASTR_FORCE_USING_EXISTING_DUMP) does not
+    # exit but stays idle, so it is not restarted; failures are retried
     restart: unless-stopped
     user: 1000:1000
     environment:
       MASTR_FORCE_USING_EXISTING_DUMP: "${MASTR_FORCE_USING_EXISTING_DUMP:-false}" # use existing dump and do not download
-      MASTR_SKIP_IMPORT_AND_EXPORT: "${MASTR_SKIP_IMPORT_AND_EXPORT:-false}" # skip import, enrichment and export completely
-      MASTR_CONCURRENCY: "${MASTR_CONCURRENCY:-}" # parallel processes for import, enrichment and export (empty = CPU cores minus one)
+      MASTR_SKIP_IMPORT_AND_EXPORT: "${MASTR_SKIP_IMPORT_AND_EXPORT:-false}" # skip import (incl. UTM enrichment) and export completely
+      MASTR_CONCURRENCY: "${MASTR_CONCURRENCY:-}" # parallel processes for import and export (empty = CPU cores minus one)
     volumes:
       - ${MASTR_CACHE_DIR}:/mastr/cache
       - ${MASTR_OUTPUT_DIR}:/mastr/output
