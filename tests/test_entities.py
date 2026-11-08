@@ -10,6 +10,9 @@ from db.entities import (
     Einheiten,
     EinheitenGeoEnrichment,
     Indices,
+    MAP_INDEX_COLUMNS,
+    MAP_INDEX_KEY,
+    MapIndices,
     SelectUDFs,
     Type,
 )
@@ -111,6 +114,16 @@ def test_indices_reference_existing_columns():
     for index in Indices:
         entity_class = Einheiten[index.name].value
         assert index.value in entity_class, f"index {index.name} references a missing column"
+
+
+def test_map_indices_reference_existing_columns():
+    for index in MapIndices:
+        entity_class = Einheiten[index.name].value
+        names = {column.name for column in entity_class}
+        for name in (MAP_INDEX_KEY, *MAP_INDEX_COLUMNS, "Breitengrad", "Laengengrad"):
+            assert name in names, f"map index {index.name} references a missing column {name}"
+        for column in index.value:
+            assert column in entity_class, f"map index {index.name} references a column of another table"
 
 
 def test_nv_fields_have_their_main_field():

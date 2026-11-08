@@ -73,10 +73,15 @@ services:
     environment:
       MASTR_STATIC_URL: http://mastr-static:8080
       MASTR_STATIC_PUBLIC_URL: ${MASTR_STATIC_PUBLIC_URL}
+      # read-only access to the database for the maps page
+      DB_HOST: db
+      DB_USER: mastr
+      DB_PASSWORD: password
     ports:
       - "127.0.0.1:8081:8080"
     depends_on:
       - mastr-static
+      - db
 
 volumes:
   mastr-database:

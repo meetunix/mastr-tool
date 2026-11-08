@@ -118,6 +118,23 @@ class TestCreateSchema:
             table = mastr_type.value.entity.name
             assert f"ON {table}(Bundesland)" in schema, table
 
+    def test_map_indices_cover_the_units_with_coordinates(self, tmp_path):
+        """The maps page of mastr-app reads the units of a state that have
+        coordinates from a partial covering index (index-only scan), not
+        from the table: e.g. EinheitenSolar has 2 GB."""
+        from db.entities import MapIndices
+
+        schema = constraints_sql(tmp_path)
+        for index in MapIndices:
+            extra = ", ".join(column.name for column in index.value)
+            assert (
+                f"CREATE INDEX IF NOT EXISTS {index.name}_map_idx ON {index.name}(Bundesland) "
+                f"INCLUDE (EinheitMastrNummer, Breitengrad, Laengengrad, EinheitBetriebsstatus, {extra}) "
+                "WHERE Breitengrad BETWEEN -90 AND 90 AND Laengengrad BETWEEN -180 AND 180;"
+            ) in schema
+        assert "ON EinheitenSolar(Bundesland) INCLUDE (" in schema
+        assert "NameDesSolarparks, Nettonennleistung)" in schema
+
     def test_every_index_has_a_unique_name(self, tmp_path):
         """Regression: the index name used to be just '<column>_idx', so all
         Bundesland indices shared one name and 'IF NOT EXISTS' silently skipped

@@ -112,6 +112,13 @@ def create_constraints(path_constraints: Path) -> None:
             f"CREATE INDEX IF NOT EXISTS {index.name}_{index.value.name}_idx "
             f"ON {index.name}({index.value.name});\n\n"
         )
+    for index in MapIndices:
+        # partial covering index for the maps page of mastr-app (see MapIndices)
+        columns = [*MAP_INDEX_COLUMNS, *(column.name for column in index.value)]
+        s += (
+            f"CREATE INDEX IF NOT EXISTS {index.name}_map_idx ON {index.name}({MAP_INDEX_KEY}) "
+            f"INCLUDE ({', '.join(columns)}) WHERE {MAP_INDEX_CONDITION};\n\n"
+        )
 
     path_constraints.write_text(s)
 

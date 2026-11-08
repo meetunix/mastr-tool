@@ -1242,6 +1242,42 @@ class Indices(Enum):
     EinheitenStromVerbraucher = EinheitStromVerbraucher.Bundesland
 
 
+# Partial covering indices for the maps page of mastr-app
+# (mastr_webapp/units.py): the units of a state that have coordinates, with
+# all columns the map shows. The map query is answered from the index alone
+# (index-only scan) instead of reading the table, e.g. 26 MB instead of the
+# 2 GB of EinheitenSolar for the units of Bayern. Key, condition and columns
+# must match the map query of mastr-app. The included names are short (at
+# most about 200 bytes), far below the size limit of an index row (2.7 kB).
+MAP_INDEX_KEY = "Bundesland"
+MAP_INDEX_CONDITION = "Breitengrad BETWEEN -90 AND 90 AND Laengengrad BETWEEN -180 AND 180"
+MAP_INDEX_COLUMNS = ("EinheitMastrNummer", "Breitengrad", "Laengengrad", "EinheitBetriebsstatus")
+
+
+class MapIndices(Enum):
+    """Unit tables on the maps page -> further columns of the map index (name,
+    name of the wind or solar park, net power)."""
+
+    EinheitenWind = (EinheitWind.NameStromerzeugungseinheit, EinheitWind.NameWindpark, EinheitWind.Nettonennleistung)
+    EinheitenSolar = (
+        EinheitSolar.NameStromerzeugungseinheit,
+        EinheitSolar.NameDesSolarparks,
+        EinheitSolar.Nettonennleistung,
+    )
+    EinheitenBiomasse = (EinheitBiomasse.NameStromerzeugungseinheit, EinheitBiomasse.Nettonennleistung)
+    EinheitenWasser = (EinheitWasser.NameStromerzeugungseinheit, EinheitWasser.Nettonennleistung)
+    EinheitenGeothermieGrubengasDruckentspannung = (
+        EinheitGeothermieGrubengasDruckentspannung.NameStromerzeugungseinheit,
+        EinheitGeothermieGrubengasDruckentspannung.Nettonennleistung,
+    )
+    EinheitenKernkraft = (EinheitKernkraft.NameStromerzeugungseinheit, EinheitKernkraft.Nettonennleistung)
+    EinheitenVerbrennung = (EinheitVerbrennung.NameStromerzeugungseinheit, EinheitVerbrennung.Nettonennleistung)
+    EinheitenStromSpeicher = (EinheitStromSpeicher.NameStromerzeugungseinheit, EinheitStromSpeicher.Nettonennleistung)
+    EinheitenGasErzeuger = (EinheitGasErzeuger.NameGaserzeugungseinheit,)
+    EinheitenGasSpeicher = (EinheitGasSpeicher.NameGasspeicher,)
+    EinheitenGasverbraucher = (EinheitGasverbraucher.NameGasverbrauchsseinheit,)
+
+
 if __name__ == "__main__":
 
     for ent in EinheitWind:

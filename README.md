@@ -32,7 +32,7 @@ geteilt:
 - **`mastr-tool`** – das Backend. Führt den Scheduler aus, der die Pipeline betreibt: Dump-Download, DB-Import,
   Anreicherung und CSV-/Parquet-/Excel-Export. Die Ergebnisse stellt es über den Service `mastr-static` via http bereit.
 - **`mastr-app`** – das Frontend. Eine WebUI, die die exportierten Daten visualisiert. Sie greift auf `mastr-static` zu,
-  um die konvertierten Dateien zu laden.
+  um die konvertierten Dateien zu laden. Die Kartenseite liest ihre Daten lesend direkt aus der Datenbank.
 
 #### Die Pipeline im Detail
 
@@ -41,7 +41,11 @@ geteilt:
    wenn die komplette Pipeline erfolgreich war – ein fehlgeschlagener Lauf wird bei der nächsten Prüfung wiederholt
    (ohne erneuten Download).
 2. **DB-Import mit Enrichment**: Die riesigen XML-Dateien des Dumps werden in PostgreSQL importiert. Dabei werden für
-   alle Einheiten mit Koordinaten UTM-Koordinaten berechnet (Zone, Ostwert, Nordwert).
+   alle Einheiten mit Koordinaten UTM-Koordinaten berechnet (Zone, Ostwert, Nordwert). Nach dem Laden werden
+   Primärschlüssel und Indizes angelegt, darunter partielle Indizes für die Kartenseite der mastr-app (Einheiten mit
+   Koordinaten je Bundesland, `MapIndices` in `db/entities.py`). In einer bestehenden Datenbank legt
+   `python import_mastr.py --schema --cache-dir <dir> <dir>` fehlende Schlüssel und Indizes an, ohne Daten zu
+   importieren.
 3. **Export**: Die angereicherten Daten werden konvertiert in:
     - **CSV**
     - **Parquet**
