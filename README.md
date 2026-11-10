@@ -129,9 +129,8 @@ Layern wie ein eigenes Deployment:
 | `https://mastr-tile.nachtsieb.de/tiles.wind/{z}/{x}/{y}` | die Kachel            |
 
 **QGIS** (≥ 3.22): *Layer → Add Layer → Add Vector Tile Layer → New Generic Connection*, URL
-`https://mastr-tile.nachtsieb.de/tiles.wind/{z}/{x}/{y}`, Zoom 0–14, Style URL leer. Danach in den
-Layer-Eigenschaften unter *Symbology* den Sub-Layer `wind` wählen – ohne Symbologie bleibt die Ebene unsichtbar.
-Für die anderen Energieträger nur `tiles.wind` ersetzen.
+`https://mastr-tile.nachtsieb.de/tiles.wind/{z}/{x}/{y}`, Zoom 0–14, Style URL leer. Für die anderen Energieträger
+nur `tiles.wind` ersetzen, siehe [technical doc](docs/technical.md#attribute-und-bündelung).
 
 **MapLibre** bindet die Kacheln als Vektorquelle ein:
 
