@@ -6,7 +6,9 @@ tiles built by hand, so a broken decoder cannot silently report empty tiles.
 
 import struct
 
-from check_tileserver import decode_mvt, deg2tile, percentile
+import pytest
+
+from check_tileserver import FALLBACK_LAYERS, decode_mvt, deg2tile, expected_layers, percentile
 
 
 def varint(value: int) -> bytes:
@@ -109,3 +111,34 @@ def test_percentile_uses_nearest_rank():
     assert percentile(values, 0.5) == 3.0
     assert percentile(values, 0.95) == 5.0
     assert percentile([], 0.5) == 0.0
+
+
+def test_deg2tile_clamps_to_the_world():
+    """Latitudes beyond the web mercator limit (~85.05) must not produce a
+    negative y - that would build an invalid tile URL."""
+    assert deg2tile(10.0, 90.0, 10) == (540, 0)
+    assert deg2tile(10.0, 89.0, 10) == (540, 0)
+    assert deg2tile(180.0, 0.0, 4) == (15, 8)
+    assert deg2tile(-180.0, 0.0, 4) == (0, 8)
+
+
+def test_truncated_value_raises_struct_error():
+    """A truncated fixed64 is not silently accepted: the callers catch
+    struct.error and report the tile as broken."""
+    truncated = bytes([0x1A, 0x05, 0x22, 0x03, 0x19, 0x00, 0x00])
+    with pytest.raises(struct.error):
+        decode_mvt(truncated)
+
+
+def test_non_packed_tags_are_decoded():
+    """The spec says packed, but a repeated varint is valid protobuf too."""
+    feature_payload = field(2, 0, varint(0)) + field(2, 0, varint(0)) + field(3, 0, varint(1))
+    data = tile(layer("wind", ["mastr_nr"], [string_value("SEE1")], [feature_payload]))
+
+    assert decode_mvt(data)[0]["features"][0]["properties"] == {"mastr_nr": "SEE1"}
+
+
+def test_fallback_layers_match_the_sql():
+    """FALLBACK_LAYERS is only used when db/tiles.sql is missing, but it must
+    not drift from the real layer list."""
+    assert sorted(FALLBACK_LAYERS) == sorted(expected_layers())

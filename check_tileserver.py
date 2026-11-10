@@ -116,12 +116,15 @@ def _decode_value(buf: bytes):
 
 def _decode_feature(buf: bytes) -> tuple[list[int], int]:
     tags, geom_type = [], 0
-    for field, _, raw in _fields(buf):
-        if field == 2:  # packed uint32
-            pos = 0
-            while pos < len(raw):
-                tag, pos = _varint(raw, pos)
-                tags.append(tag)
+    for field, wire, raw in _fields(buf):
+        if field == 2:  # tags: packed uint32, or one varint per entry
+            if wire == 2:
+                pos = 0
+                while pos < len(raw):
+                    tag, pos = _varint(raw, pos)
+                    tags.append(tag)
+            else:
+                tags.append(raw)
         elif field == 3:
             geom_type = raw
     return tags, geom_type
@@ -161,7 +164,8 @@ def deg2tile(lon: float, lat: float, zoom: int) -> tuple[int, int]:
     n = 2**zoom
     x = int((lon + 180.0) / 360.0 * n)
     y = int((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n)
-    return min(x, n - 1), min(y, n - 1)
+    # latitudes beyond the web mercator limit (~85.05) give a negative y
+    return max(0, min(x, n - 1)), max(0, min(y, n - 1))
 
 
 def expected_layers() -> list[str]:
@@ -196,11 +200,10 @@ def label(name: str, value: str) -> str:
     return f"{name:<16} {value}"
 
 
-def run_benchmark(args, base: str, layers: list[str]) -> int:
+def run_benchmark(args, base: str, layers: list[str], failures: list[str]) -> int:
     """Request random tiles of random layers at random zooms across Germany."""
     seed = args.seed if args.seed is not None else random.randrange(1_000_000)
     rng = random.Random(seed)
-    failures: list[str] = []
 
     if args.purge_first:
         purged = 0
@@ -213,7 +216,7 @@ def run_benchmark(args, base: str, layers: list[str]) -> int:
         print(label("purge", f"{purged}/{len(layers)} sources purged"))
 
     print(
-        f"\nbenchmark: {args.requests} unique tiles, zoom {args.min_zoom}-{args.max_zoom}, "
+        f"\nbenchmark: up to {args.requests} unique tiles, zoom {args.min_zoom}-{args.max_zoom}, "
         f"{len(layers)} layers, seed {seed}"
     )
 
@@ -245,7 +248,7 @@ def run_benchmark(args, base: str, layers: list[str]) -> int:
         if response.status_code == 200:
             try:
                 features = sum(len(item["features"]) for item in decode_mvt(response.content))
-            except (ValueError, IndexError, UnicodeDecodeError) as exc:
+            except (ValueError, IndexError, UnicodeDecodeError, struct.error) as exc:
                 failures.append(f"{source} z{zoom} {x}/{y}: cannot decode the tile ({exc})")
                 continue
         results.append(
@@ -263,6 +266,8 @@ def run_benchmark(args, base: str, layers: list[str]) -> int:
     if not results:
         print("no tile could be requested")
         return 1
+    if len(results) < args.requests:
+        print(f"only {len(results)} unique tiles exist in that zoom range")
 
     header = f"{'zoom':>4} {'tiles':>6} {'p50':>9} {'p95':>9} {'max':>9} {'feat/tile':>9} {'size/tile':>9}"
     print(f"\n{header}")
@@ -297,7 +302,7 @@ def run_benchmark(args, base: str, layers: list[str]) -> int:
         )
 
     if failures:
-        print(f"\n{len(failures)} request(s) failed:")
+        print(f"\n{len(failures)} check(s) failed:")
         for failure in failures[:20]:
             print(f"  - {failure}")
         return 1
@@ -322,6 +327,13 @@ def main() -> int:
     parser.add_argument("--seed", type=int, help="random seed of the benchmark (default: random)")
     parser.add_argument("--purge-first", action="store_true", help="purge the cache before the benchmark")
     args = parser.parse_args()
+
+    if not 0 <= args.zoom <= 22:
+        parser.error("--zoom must be between 0 and 22")
+    if not 0 <= args.min_zoom <= args.max_zoom <= 22:
+        parser.error("--min-zoom/--max-zoom must satisfy 0 <= min <= max <= 22")
+    if args.requests < 1:
+        parser.error("--requests must be at least 1")
 
     base = args.url.rstrip("/")
     x, y = deg2tile(args.lon, args.lat, args.zoom)
@@ -356,8 +368,11 @@ def main() -> int:
     print(label("catalog", f"{len(published)} sources" + (f", missing: {', '.join(missing)}" if missing else "")))
 
     layers = args.layer or expected
+    if not layers:
+        print(label("layers", "none found - is db/tiles.sql present?"))
+        return 1
     if args.benchmark:
-        return run_benchmark(args, base, layers)
+        return run_benchmark(args, base, layers, failures)
 
     # --- tiles ----------------------------------------------------------
     print()
@@ -391,7 +406,7 @@ def main() -> int:
 
         try:
             decoded = decode_mvt(response.content)
-        except (ValueError, IndexError, UnicodeDecodeError) as exc:
+        except (ValueError, IndexError, UnicodeDecodeError, struct.error) as exc:
             print(table_row(source, "200", human_size(len(response.content)), "-", "-"))
             failures.append(f"{source}: cannot decode the tile ({exc})")
             continue
