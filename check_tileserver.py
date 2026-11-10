@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test for the MaStR tile server (Martin).
+"""Smoke test and benchmark for the MaStR tile server (Martin).
 
 Talks to a running server over HTTP and checks what a map client would see:
 health, catalog, TileJSON and one decoded tile per layer. Needs nothing but
@@ -10,13 +10,21 @@ health, catalog, TileJSON and one decoded tile per layer. Needs nothing but
     python check_tileserver.py --layer wind --lon 8.5 --lat 50.1 --attributes
     python check_tileserver.py --purge
 
+    python check_tileserver.py --benchmark
+    python check_tileserver.py --benchmark --requests 500 --min-zoom 8 --seed 42
+
 Exit code 0 means every check passed. An empty tile is not a failure (Martin
 answers it with 204, and the database may not be imported yet); a missing
 layer, a broken tile or a wrong content type is.
+
+The benchmark requests random tiles of random layers at random zoom levels
+across Germany. Every tile is requested once, so the timings are not dominated
+by cache hits; use --purge-first to start from a cold cache.
 """
 
 import argparse
 import math
+import random
 import re
 import shutil
 import struct
@@ -44,6 +52,10 @@ FALLBACK_LAYERS = [
 ]
 
 MVT_CONTENT_TYPES = {"application/x-protobuf", "application/vnd.mapbox-vector-tile"}
+
+# rough bounding box of Germany, the benchmark picks random points inside it
+GERMANY_LON = (5.87, 15.04)
+GERMANY_LAT = (47.27, 55.06)
 
 # column widths of the per-layer table
 W_LAYER, W_STATUS, W_SIZE, W_FEATURES, W_ATTRS = 22, 6, 9, 8, 10
@@ -160,10 +172,17 @@ def expected_layers() -> list[str]:
     return re.findall(r"CREATE OR REPLACE FUNCTION tiles\.(\w+)\(", sql.read_text())
 
 
-def human_size(num: int) -> str:
+def human_size(num: float) -> str:
     if num >= 1024 * 1024:
         return f"{num / 1024 / 1024:.1f} MB"
-    return f"{num / 1024:.1f} kB" if num >= 1024 else f"{num} B"
+    return f"{num / 1024:.1f} kB" if num >= 1024 else f"{num:.0f} B"
+
+
+def percentile(values: list[float], fraction: float) -> float:
+    """Nearest-rank percentile of an already sorted list."""
+    if not values:
+        return 0.0
+    return values[min(len(values) - 1, int(round(fraction * (len(values) - 1))))]
 
 
 def table_row(layer: str, status: str, size: str, features: str, attributes: str) -> str:
@@ -177,6 +196,115 @@ def label(name: str, value: str) -> str:
     return f"{name:<16} {value}"
 
 
+def run_benchmark(args, base: str, layers: list[str]) -> int:
+    """Request random tiles of random layers at random zooms across Germany."""
+    seed = args.seed if args.seed is not None else random.randrange(1_000_000)
+    rng = random.Random(seed)
+    failures: list[str] = []
+
+    if args.purge_first:
+        purged = 0
+        for name in layers:
+            try:
+                if requests.delete(f"{base}/cache/tiles.{name}", timeout=args.timeout).status_code == 200:
+                    purged += 1
+            except requests.RequestException:
+                pass
+        print(label("purge", f"{purged}/{len(layers)} sources purged"))
+
+    print(
+        f"\nbenchmark: {args.requests} unique tiles, zoom {args.min_zoom}-{args.max_zoom}, "
+        f"{len(layers)} layers, seed {seed}"
+    )
+
+    seen: set[tuple[str, int, int, int]] = set()
+    results: list[dict] = []
+    attempts = 0
+    while len(results) < args.requests and attempts < args.requests * 50:
+        attempts += 1
+        layer = rng.choice(layers)
+        zoom = rng.randint(args.min_zoom, args.max_zoom)
+        x, y = deg2tile(rng.uniform(*GERMANY_LON), rng.uniform(*GERMANY_LAT), zoom)
+        if (layer, zoom, x, y) in seen:
+            continue
+        seen.add((layer, zoom, x, y))
+
+        source = f"tiles.{layer}"
+        started = time.perf_counter()
+        try:
+            response = requests.get(f"{base}/{source}/{zoom}/{x}/{y}", timeout=args.timeout)
+        except requests.RequestException as exc:
+            failures.append(f"{source} z{zoom} {x}/{y}: {exc}")
+            continue
+        elapsed = (time.perf_counter() - started) * 1000
+
+        if response.status_code not in (200, 204):
+            failures.append(f"{source} z{zoom} {x}/{y}: HTTP {response.status_code}")
+            continue
+        features = 0
+        if response.status_code == 200:
+            try:
+                features = sum(len(item["features"]) for item in decode_mvt(response.content))
+            except (ValueError, IndexError, UnicodeDecodeError) as exc:
+                failures.append(f"{source} z{zoom} {x}/{y}: cannot decode the tile ({exc})")
+                continue
+        results.append(
+            {
+                "layer": source,
+                "zoom": zoom,
+                "x": x,
+                "y": y,
+                "ms": elapsed,
+                "bytes": len(response.content),
+                "features": features,
+            }
+        )
+
+    if not results:
+        print("no tile could be requested")
+        return 1
+
+    header = f"{'zoom':>4} {'tiles':>6} {'p50':>9} {'p95':>9} {'max':>9} {'feat/tile':>9} {'size/tile':>9}"
+    print(f"\n{header}")
+    print("-" * len(header))
+
+    def summary_row(name: str, rows: list[dict]) -> str:
+        times = sorted(item["ms"] for item in rows)
+        return (
+            f"{name:>4} {len(rows):>6} {percentile(times, 0.5):>9.1f} {percentile(times, 0.95):>9.1f} "
+            f"{times[-1]:>9.1f} {sum(item['features'] for item in rows) / len(rows):>9.0f} "
+            f"{human_size(sum(item['bytes'] for item in rows) / len(rows)):>9}"
+        )
+
+    for zoom in sorted({item["zoom"] for item in results}):
+        print(summary_row(str(zoom), [item for item in results if item["zoom"] == zoom]))
+    print("-" * len(header))
+    print(summary_row("all", results))
+
+    total_bytes = sum(item["bytes"] for item in results)
+    total_features = sum(item["features"] for item in results)
+    total_seconds = sum(item["ms"] for item in results) / 1000
+    print(
+        f"\ntotal {human_size(total_bytes)}, {total_features} features, "
+        f"{len(results)} tiles in {total_seconds:.1f} s"
+    )
+
+    print("\nslowest")
+    for item in sorted(results, key=lambda row: row["ms"], reverse=True)[:5]:
+        print(
+            f"  {item['layer']:<22} z{item['zoom']:<2} {item['x']}/{item['y']:<6} "
+            f"{item['ms']:>9.1f} ms {item['features']:>6} features {human_size(item['bytes']):>9}"
+        )
+
+    if failures:
+        print(f"\n{len(failures)} request(s) failed:")
+        for failure in failures[:20]:
+            print(f"  - {failure}")
+        return 1
+    print("\nall requests succeeded")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--url", default="http://127.0.0.1:7800", help="base URL of the tile server")
@@ -187,6 +315,12 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=30.0, help="request timeout in seconds (default: 30)")
     parser.add_argument("--attributes", action="store_true", help="list the feature attributes of every layer")
     parser.add_argument("--purge", action="store_true", help="also test DELETE /cache/{source}")
+    parser.add_argument("--benchmark", action="store_true", help="benchmark random tiles instead of the smoke test")
+    parser.add_argument("--requests", type=int, default=100, help="unique tiles in the benchmark (default: 100)")
+    parser.add_argument("--min-zoom", type=int, default=0, help="lowest benchmark zoom (default: 0)")
+    parser.add_argument("--max-zoom", type=int, default=14, help="highest benchmark zoom (default: 14)")
+    parser.add_argument("--seed", type=int, help="random seed of the benchmark (default: random)")
+    parser.add_argument("--purge-first", action="store_true", help="purge the cache before the benchmark")
     args = parser.parse_args()
 
     base = args.url.rstrip("/")
@@ -194,7 +328,9 @@ def main() -> int:
     failures: list[str] = []
 
     print(f"Martin tile server: {base}")
-    print(f"tile: z{args.zoom} x{x} y{y} (lon {args.lon}, lat {args.lat})\n")
+    if not args.benchmark:
+        print(f"tile: z{args.zoom} x{x} y{y} (lon {args.lon}, lat {args.lat})")
+    print()
 
     # --- health ---------------------------------------------------------
     try:
@@ -219,8 +355,11 @@ def main() -> int:
         failures.append(f"missing layers: {', '.join(missing)}")
     print(label("catalog", f"{len(published)} sources" + (f", missing: {', '.join(missing)}" if missing else "")))
 
-    # --- tiles ----------------------------------------------------------
     layers = args.layer or expected
+    if args.benchmark:
+        return run_benchmark(args, base, layers)
+
+    # --- tiles ----------------------------------------------------------
     print()
     print(table_row("layer", "status", "size", "features", "attributes"))
     print("-" * (W_LAYER + W_STATUS + W_SIZE + W_FEATURES + W_ATTRS + 4))

@@ -6,7 +6,7 @@ tiles built by hand, so a broken decoder cannot silently report empty tiles.
 
 import struct
 
-from check_tileserver import decode_mvt
+from check_tileserver import decode_mvt, deg2tile, percentile
 
 
 def varint(value: int) -> bytes:
@@ -96,3 +96,16 @@ def test_boolean_and_negative_values():
     data = tile(layer("wind", keys, values, [feature([0, 0, 1, 1], [9, 0, 0])]))
 
     assert decode_mvt(data)[0]["features"][0]["properties"] == {"hochspannung": True, "delta": -2}
+
+
+def test_deg2tile_known_coordinates():
+    assert deg2tile(0.0, 0.0, 0) == (0, 0)
+    assert deg2tile(0.0, 0.0, 1) == (1, 1)
+    assert deg2tile(13.405, 52.52, 10) == (550, 335)  # Berlin
+
+
+def test_percentile_uses_nearest_rank():
+    values = [1.0, 2.0, 3.0, 4.0, 5.0]
+    assert percentile(values, 0.5) == 3.0
+    assert percentile(values, 0.95) == 5.0
+    assert percentile([], 0.5) == 0.0
