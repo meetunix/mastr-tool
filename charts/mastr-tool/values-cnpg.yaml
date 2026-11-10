@@ -11,7 +11,10 @@
 #          namespace: mastr
 #        spec:
 #          instances: 3
-#          imageName: ghcr.io/cloudnative-pg/postgresql:18
+#          # PostGIS variant of the CNPG operand image: the tile functions
+#          # (db/tiles.sql) and the GiST indices on the unit tables need the
+#          # extension. `system` includes Barman Cloud (for the backup below).
+#          imageName: ghcr.io/cloudnative-pg/postgis:18-3.6-system-trixie
 #          storage:
 #            size: 50Gi
 #          managed:
@@ -29,6 +32,17 @@
 #   CNPG auto-creates:
 #     - Service:  mastr-db-rw   (read/write, use as DB_HOST)
 #     - Secret:    mastr-db-app  (keys: username, password)
+#
+#   The managed role `mastr` is not a superuser and has no CREATEROLE, so the
+#   PostGIS extension and the read-only role for Martin have to be
+#   created once by an administrator (e.g. `kubectl exec` into the primary and
+#   run as the postgres superuser):
+#
+#     CREATE EXTENSION IF NOT EXISTS postgis;
+#     CREATE ROLE tiles_reader LOGIN PASSWORD 'tiles';
+#
+#   Without the extension the import fails, without the role the tile server
+#   has no access (mastr-tool logs a warning and continues).
 #
 # Install:
 #   helm install mastr ./charts/mastr-tool -n mastr -f values-cnpg.yaml

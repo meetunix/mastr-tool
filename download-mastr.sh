@@ -5,6 +5,7 @@ shopt -s nocasematch
 # MASTR_CONCURRENCY: Number of parallel processes for import and export (default: CPU cores minus one)
 # MASTR_FORCE_USING_EXISTING_DUMP: Force pipeline run without downloading dump
 # MASTR_SKIP_IMPORT_AND_EXPORT: Skip database import (incl. UTM enrichment) and export (e.g. restart without touching database or exports)
+# MARTIN_URL: Base URL of the tile server, its cache is purged after the import (empty = skip)
 
 PYTHON="/mastr/.venv/bin/python3"
 
@@ -25,6 +26,9 @@ ETAG_FILE="$MASTR_CACHE/etag.txt"
 MASTR_CONCURRENCY="${MASTR_CONCURRENCY:-$(( $(nproc) > 1 ? $(nproc) - 1 : 1 ))}"
 
 SYSTEMD_ID="download-mastr.sh"
+
+# tile sources published by Martin (db/tiles.sql): the cache is purged per source
+MARTIN_SOURCES="wind solar biomasse wasser geothermie stromspeicher kernkraft verbrennung gaserzeuger gasspeicher gasverbraucher stromverbraucher"
 EXPORT_DIR="/mastr/output/export"
 IMPORT_TIMESTAMP_FILE="$EXPORT_DIR/import_timestamp"
 DUMP_DATE_FILE="$EXPORT_DIR/dump_date"
@@ -48,6 +52,14 @@ log_info() {
         echo "$1" | systemd-cat -p info -t "$SYSTEMD_ID"
     else
         echo "[$SYSTEMD_ID] [INFO] $1"
+    fi
+}
+
+log_warn () {
+    if [ -x "$(which systemd-cat)" ] ; then
+        echo "$1" | systemd-cat -p warning -t "$SYSTEMD_ID"
+    else
+        echo "[$SYSTEMD_ID] [WARN] $1"
     fi
 }
 
@@ -199,14 +211,49 @@ mastr_db_dump() {
   local dump_file="$EXPORT_DIR/mastr-latest.sql"
   local tmp_file="$EXPORT_DIR/.mastr-latest.sql.tmp-$$"
   log_info "create database dump (pg_dump, zstd) at $dump_file"
+  # --exclude-schema=tiles: the tile functions are deployment specific and are
+  # recreated by every import. The PostGIS extension and the GiST indices on
+  # the unit tables stay in the dump, so restoring it needs PostGIS (see
+  # README) - excluding the extension would not help, the indices need it.
   if PGPASSWORD="${DB_PASSWORD:-password}" pg_dump \
     -h "${DB_HOST:-db}" -p "${DB_PORT:-5432}" -U "${DB_USER:-mastr}" -d "${DB_NAME:-mastr}" \
+    --exclude-schema=tiles \
     --format=custom --compress=zstd --file="$tmp_file" ; then
     mv -f "$tmp_file" "$dump_file"
     check_ret_val $? "error while moving database dump" "database dump written to $dump_file"
   else
     rm -f "$tmp_file"
     check_ret_val 1 "error while creating database dump" "database dump not written"
+  fi
+}
+
+mastr_tiles_purge() {
+  # Martin keeps the tiles for tile_expiry (12h). Without this purge the map
+  # would show the data of the previous import for up to that long. A failure
+  # is not fatal: the TTL bounds the staleness, and the import must not fail
+  # because the tile server is down.
+  local source code failed=0 url
+  if [[ -z $MARTIN_URL ]] ; then
+    log_info "MARTIN_URL not set, skipping the tile cache purge"
+    return 0
+  fi
+  url="${MARTIN_URL%/}" # a trailing slash would produce a double slash in the path
+  for source in $MARTIN_SOURCES ; do
+    code="$(curl --silent --show-error --connect-timeout 3 --max-time 10 --output /dev/null \
+        --write-out '%{http_code}' --request DELETE "$url/cache/tiles.$source")"
+    case $code in
+      200) ;;
+      # Martin has not discovered the source yet (first import, or a new layer
+      # before the next reload): there is nothing to purge
+      404) log_info "tiles.$source is not published yet, nothing to purge" ;;
+      *)
+        log_warn "error while purging the tile cache of tiles.$source (HTTP $code)"
+        failed=$((failed + 1))
+        ;;
+    esac
+  done
+  if [ $failed -eq 0 ] ; then
+    log_info "purged the tile cache of $MARTIN_URL"
   fi
 }
 
@@ -217,6 +264,7 @@ mastr_import() {
     log_info "skip import and export (MASTR_SKIP_IMPORT_AND_EXPORT is set)"
   else
     mastr_db_import
+    mastr_tiles_purge
     mastr_csv_export
     mastr_db_dump
   fi

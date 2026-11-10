@@ -1,0 +1,41 @@
+{{- if .Values.martin.enabled }}
+{{- if .Values.martin.ingress.enabled }}
+{{- $fullname := include "mastr-tool.fullname" . -}}
+{{- $m := .Values.martin -}}
+{{- $svcPort := $m.service.port -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullname }}-martin
+  labels:
+    {{- include "mastr-tool.labels" . | nindent 4 }}
+    app.kubernetes.io/component: martin
+  {{- with $m.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with $m.ingress.className }}
+  ingressClassName: {{ . | quote }}
+  {{- end }}
+  {{- with $m.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- range $m.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path | quote }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ $fullname }}-martin
+                port:
+                  number: {{ $svcPort }}
+          {{- end }}
+    {{- end }}
+{{- end }}
+{{- end }}

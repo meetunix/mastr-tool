@@ -8,7 +8,7 @@ from pathlib import Path
 
 from db.entities import Einheiten
 import import_mastr
-from tests.conftest import FakeConnection
+from tests.conftest import FakeConnection, FakeCursor
 
 
 class TestGetFiles:
@@ -226,3 +226,126 @@ class TestParseAndWriteXml:
         values = dict(zip(names, captured[0]))
         assert values["Weic"] is None
         assert values["Weic_nv"] is True
+
+
+class TestGeomIndices:
+    def test_geom_indices_use_the_point_expression(self, tmp_path):
+        """No geometry column is stored: the GiST index is built on the point
+        expression, so the import stays unchanged."""
+        from db.entities import GEOM_INDEX_EXPRESSION, GeomIndices, MAP_INDEX_CONDITION
+
+        schema = constraints_sql(tmp_path)
+        for index in GeomIndices:
+            assert (
+                f"CREATE INDEX IF NOT EXISTS {index.name}_geom_idx ON {index.name} "
+                f"USING GIST ({GEOM_INDEX_EXPRESSION}) WHERE {MAP_INDEX_CONDITION};"
+            ) in schema
+
+    def test_geom_indices_cover_all_tables_with_coordinates(self):
+        """A unit table with coordinates without an index would make every
+        tile request a sequential scan."""
+        from db.entities import GeomIndices
+
+        for index in GeomIndices:
+            # the index expression is built from these two columns
+            columns = {column.name for column in index.value}
+            assert {"Laengengrad", "Breitengrad"} <= columns, index.name
+        for entity in Einheiten:
+            columns = {column.name for column in entity.value}
+            has_coordinates = {"Laengengrad", "Breitengrad"} <= columns
+            assert (entity.name in GeomIndices.__members__) == has_coordinates, entity.name
+
+    def test_geom_index_expression_matches_the_tile_query(self):
+        """The tile functions filter with "&&" on exactly the indexed
+        expression - any difference and the index is not used."""
+        from db.entities import GEOM_INDEX_EXPRESSION
+
+        tiles_sql = (Path(__file__).resolve().parent.parent / "db" / "tiles.sql").read_text()
+        query_expression = GEOM_INDEX_EXPRESSION.replace("Laengengrad", "e.laengengrad").replace(
+            "Breitengrad", "e.breitengrad"
+        )
+        assert query_expression in tiles_sql
+
+
+class TestWriteSchema:
+    def test_schema_udf_and_tiles_are_executed_in_order(self, tmp_path, monkeypatch):
+        """The tile functions need the tables (schema) and PostGIS (udf.sql),
+        so the three files are executed as one script in this order."""
+        connection = FakeConnection()
+        calls = []
+        monkeypatch.setattr(import_mastr, "get_db_connection", lambda: connection)
+        monkeypatch.setattr(import_mastr, "create_tiles_role", lambda: calls.append("role"))
+
+        path_schema = tmp_path / "schema.sql"
+        path_udf = tmp_path / "udf.sql"
+        path_tiles = tmp_path / "tiles.sql"
+        path_schema.write_text("CREATE TABLE t (id int);")
+        path_udf.write_text("CREATE EXTENSION IF NOT EXISTS postgis;")
+        path_tiles.write_text("CREATE SCHEMA IF NOT EXISTS tiles;")
+
+        import_mastr.write_schema(path_schema, path_udf, path_tiles)
+
+        executed = connection.cursors[0].executed[0]
+        assert executed.index("CREATE TABLE t") < executed.index("CREATE EXTENSION") < executed.index("CREATE SCHEMA")
+        assert connection.commits == 1
+        # the role must exist before db/tiles.sql grants it access
+        assert calls == ["role"]
+
+
+class TestCreateTilesRole:
+    def test_missing_role_is_created_with_the_env_password(self, monkeypatch):
+        connection = FakeConnection()
+        monkeypatch.setattr(import_mastr, "get_db_connection", lambda: connection)
+        monkeypatch.setenv("TILES_DB_PASSWORD", "secret")
+
+        import_mastr.create_tiles_role()
+
+        cursor = connection.cursors[0]
+        assert cursor.executed[0] == "SELECT 1 FROM pg_roles WHERE rolname = %s"
+        assert cursor.executed[1] == 'CREATE ROLE tiles_reader WITH LOGIN PASSWORD %s'
+        assert cursor.executed_params[1] == ("secret",)
+        assert connection.commits == 1
+        assert connection.closed is True
+
+    def test_existing_role_gets_the_password_of_the_env(self, monkeypatch):
+        connection = FakeConnection(rows=[(1,)])
+        monkeypatch.setattr(import_mastr, "get_db_connection", lambda: connection)
+        monkeypatch.setenv("TILES_DB_PASSWORD", "secret")
+
+        import_mastr.create_tiles_role()
+
+        cursor = connection.cursors[0]
+        assert cursor.executed[1] == 'ALTER ROLE tiles_reader WITH LOGIN PASSWORD %s'
+        assert cursor.executed_params[1] == ("secret",)
+
+    def test_default_password_is_used_without_env(self, monkeypatch):
+        connection = FakeConnection()
+        monkeypatch.setattr(import_mastr, "get_db_connection", lambda: connection)
+        monkeypatch.delenv("TILES_DB_PASSWORD", raising=False)
+
+        import_mastr.create_tiles_role()
+
+        assert connection.cursors[0].executed_params[1] == (import_mastr.TILES_DB_PASSWORD_DEFAULT,)
+
+    def test_missing_createrole_does_not_abort_the_import(self, monkeypatch):
+        """A CloudNativePG managed role has no CREATEROLE: the role has to be
+        created by an administrator, the import must still run."""
+        import psycopg2
+
+        class PrivilegeErrorCursor(FakeCursor):
+            def execute(self, statement, params=None):
+                raise psycopg2.errors.InsufficientPrivilege("permission denied to create role")
+
+        class PrivilegeErrorConnection(FakeConnection):
+            def cursor(self):
+                cursor = PrivilegeErrorCursor(self)
+                self.cursors.append(cursor)
+                return cursor
+
+        connection = PrivilegeErrorConnection()
+        monkeypatch.setattr(import_mastr, "get_db_connection", lambda: connection)
+
+        import_mastr.create_tiles_role()
+
+        assert connection.rollbacks == 1
+        assert connection.closed is True

@@ -78,6 +78,15 @@ spec:
                 secretKeyRef:
                   name: {{ include "mastr-tool.dbSecretName" . }}
                   key: {{ .Values.database.existingSecretPasswordKey }}
+            {{- if .Values.martin.enabled }}
+            # password of the read-only role tiles_reader for Martin,
+            # created by import_mastr.py
+            - name: TILES_DB_PASSWORD
+              value: {{ .Values.martin.dbPassword | quote }}
+            # the import purges Martin's tile cache afterwards
+            - name: MARTIN_URL
+              value: "http://{{ $fullname }}-martin:{{ .Values.martin.service.port }}"
+            {{- end }}
             {{- with $mt.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

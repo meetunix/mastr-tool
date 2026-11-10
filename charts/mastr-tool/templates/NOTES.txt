@@ -18,6 +18,9 @@ Services:
 {{- if .Values.mastrStatic.enabled }}
   mastr-static:  http://{{ include "mastr-tool.fullname" . }}-static:{{ .Values.mastrStatic.service.port }}  (exported files)
 {{- end }}
+{{- if .Values.martin.enabled }}
+  martin:        http://{{ include "mastr-tool.fullname" . }}-martin:{{ .Values.martin.service.port }}  (vector tiles, /catalog lists the layers)
+{{- end }}
 
 Next steps:
   - Check pod status:  kubectl --namespace {{ .Release.Namespace }} get pods

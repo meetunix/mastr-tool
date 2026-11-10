@@ -1,0 +1,47 @@
+# Martin configuration for the MaStR tile server (db/tiles.sql).
+#
+# The connection string comes from the environment, so this file is identical
+# for docker compose and the Helm chart (charts/mastr-tool/files/martin.yaml,
+# tests/test_martin_config.py keeps both in sync).
+#
+# Only the function sources are published: `tables: false` keeps the unit
+# tables out of the catalog, and the read-only role tiles_reader has no SELECT
+# privilege on them anyway.
+
+# the Helm chart passes martin.containerPort as MARTIN_LISTEN_ADDRESSES
+listen_addresses: ${MARTIN_LISTEN_ADDRESSES:-0.0.0.0:7800}
+
+# In-memory tile cache, shared by all workers. The TTL is what makes it safe:
+# without one, Martin would serve tiles from before an import until the cache
+# is evicted by size pressure. The MaStR changes at most once a day, so 12h
+# bounds the staleness after an import while keeping the cache effective for
+# low traffic - and it keeps the map served from cache during the multi-hour
+# import, when the tables are dropped and rebuilt.
+# maxzoom keeps the (rarely requested) overzoom levels out.
+# Only the tile cache is used: the PMTiles, font and sprite caches are budgets
+# that stay empty (they allocate nothing until something is stored).
+cache:
+  size_mb: 1024
+  # tiles get half of size_mb by default
+  tile_size_mb: 1024
+  tile_expiry: 12h
+  maxzoom: 14
+cache_control: "public, max-age=3600"
+
+# the web UI is only reachable from localhost anyway; for debugging start
+# Martin with `--webui enableforall`
+web_ui: disable
+
+# download-mastr.sh purges the tile cache after every import, so the map shows
+# the new data immediately instead of waiting for tile_expiry
+endpoints:
+  purge_cache: true
+
+postgres:
+  connection_string: ${MARTIN_DATABASE_URL}
+  auto_publish:
+    functions:
+      from_schemas: [tiles]
+      # source id = schema.function -> /tiles.wind/{z}/{x}/{y}
+      source_id_format: "{schema}.{function}"
+    tables: false

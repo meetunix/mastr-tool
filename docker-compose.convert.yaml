@@ -20,7 +20,11 @@ services:
         condition: service_healthy
 
   db:
-    image: docker.io/postgres:18
+    # PostGIS variant of the official image: the tile functions (db/tiles.sql)
+    # and the GiST indices on the unit tables need the extension. The image is
+    # built on the official postgres image, the existing data directory keeps
+    # working (no dump and restore needed).
+    image: docker.io/postgis/postgis:18-3.6
     restart: unless-stopped
     container_name: mastr-db
     environment:

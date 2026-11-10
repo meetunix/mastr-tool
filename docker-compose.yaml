@@ -13,6 +13,8 @@ services:
       MASTR_FORCE_USING_EXISTING_DUMP: "${MASTR_FORCE_USING_EXISTING_DUMP:-false}" # use existing dump and do not download
       MASTR_SKIP_IMPORT_AND_EXPORT: "${MASTR_SKIP_IMPORT_AND_EXPORT:-false}" # skip import (incl. UTM enrichment) and export completely
       MASTR_CONCURRENCY: "${MASTR_CONCURRENCY:-}" # parallel processes for import and export (empty = CPU cores minus one)
+      TILES_DB_PASSWORD: "${TILES_DB_PASSWORD:-tiles}" # password of the read-only role for Martin
+      MARTIN_URL: "http://martin:7800" # tile cache is purged after the import
     volumes:
       - ${MASTR_CACHE_DIR}:/mastr/cache
       - ${MASTR_OUTPUT_DIR}:/mastr/output
@@ -34,7 +36,11 @@ services:
       - mastr-tool
 
   db:
-    image: docker.io/postgres:18
+    # PostGIS variant of the official image: the tile functions (db/tiles.sql)
+    # and the GiST indices on the unit tables need the extension. The image is
+    # built on the official postgres image, the existing data directory keeps
+    # working (no dump and restore needed).
+    image: docker.io/postgis/postgis:18-3.6
     restart: unless-stopped
     container_name: mastr-db
     environment:
@@ -62,6 +68,36 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # Mapbox Vector Tiles (MVT) of the units with coordinates, served live from
+  # the database by Martin. The layers are the functions in db/tiles.sql, the
+  # connection uses the read-only role created by mastr-tool.
+  #   http://127.0.0.1:7800/health                  health check
+  #   http://127.0.0.1:7800/catalog                 list of layers
+  #   http://127.0.0.1:7800/tiles.wind              TileJSON of one layer
+  #   http://127.0.0.1:7800/tiles.wind/{z}/{x}/{y}  the tile
+  martin:
+    pull_policy: if_not_present
+    image: ghcr.io/maplibre/martin:1.16.1
+    container_name: mastr-martin
+    restart: unless-stopped
+    command: [ "--config", "/etc/martin/config.yaml" ]
+    environment:
+      MARTIN_DATABASE_URL: postgresql://tiles_reader:${TILES_DB_PASSWORD:-tiles}@db:5432/mastr
+    volumes:
+      - ./martin/config.yaml:/etc/martin/config.yaml:ro
+    ports:
+      - "127.0.0.1:7800:7800"
+    healthcheck:
+      # the image's built-in check uses Martin's default port 3000
+      test: [ "CMD-SHELL", "wget --spider -q http://127.0.0.1:7800/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      db:
+        condition: service_healthy
 
   # MaStR WebUI
   mastr-app:
