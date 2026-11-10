@@ -72,10 +72,10 @@ services:
   # Mapbox Vector Tiles (MVT) of the units with coordinates, served live from
   # the database by Martin. The layers are the functions in db/tiles.sql, the
   # connection uses the read-only role created by mastr-tool.
-  #   http://127.0.0.1:7800/health                  health check
-  #   http://127.0.0.1:7800/catalog                 list of layers
-  #   http://127.0.0.1:7800/tiles.wind              TileJSON of one layer
-  #   http://127.0.0.1:7800/tiles.wind/{z}/{x}/{y}  the tile
+  #   http://127.0.0.1:8082/health                  health check
+  #   http://127.0.0.1:8082/catalog                 list of layers
+  #   http://127.0.0.1:8082/tiles.wind              TileJSON of one layer
+  #   http://127.0.0.1:8082/tiles.wind/{z}/{x}/{y}  the tile
   martin:
     pull_policy: if_not_present
     image: ghcr.io/maplibre/martin:1.16.1
@@ -87,7 +87,7 @@ services:
     volumes:
       - ./martin/config.yaml:/etc/martin/config.yaml:ro
     ports:
-      - "127.0.0.1:7800:7800"
+      - "127.0.0.1:8082:7800"
     healthcheck:
       # the image's built-in check uses Martin's default port 3000
       test: [ "CMD-SHELL", "wget --spider -q http://127.0.0.1:7800/health || exit 1" ]

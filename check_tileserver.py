@@ -6,7 +6,7 @@ health, catalog, TileJSON and one decoded tile per layer. Needs nothing but
 `requests` and a running server.
 
     python check_tileserver.py
-    python check_tileserver.py --url http://localhost:7800 --zoom 12
+    python check_tileserver.py --url http://localhost:8082 --zoom 12
     python check_tileserver.py --layer wind --lon 8.5 --lat 50.1 --attributes
     python check_tileserver.py --purge
 
@@ -312,7 +312,9 @@ def run_benchmark(args, base: str, layers: list[str], failures: list[str]) -> in
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--url", default="http://127.0.0.1:7800", help="base URL of the tile server")
+    parser.add_argument(
+        "--url", default="http://127.0.0.1:8082", help="base URL of the tile server (default: http://127.0.0.1:8082)"
+    )
     parser.add_argument("--zoom", type=int, default=10, help="zoom level of the test tile (default: 10)")
     parser.add_argument("--lon", type=float, default=10.45, help="longitude of the test tile (default: 10.45)")
     parser.add_argument("--lat", type=float, default=51.16, help="latitude of the test tile (default: 51.16)")
