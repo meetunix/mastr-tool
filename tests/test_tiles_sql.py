@@ -26,8 +26,22 @@ FUNCTION_PATTERN = re.compile(
     re.S,
 )
 
-# layers that bundle their points per grid cell below zoom 10
-BUNDLED_LAYERS = {"solar", "stromspeicher"}
+# every layer bundles its points per grid cell below a zoom: solar and
+# stromspeicher have millions of units, the other layers tens of thousands
+BUNDLED_BELOW_10 = {"solar", "stromspeicher"}
+BUNDLED_BELOW_6 = {
+    "wind",
+    "biomasse",
+    "wasser",
+    "geothermie",
+    "kernkraft",
+    "verbrennung",
+    "gaserzeuger",
+    "gasspeicher",
+    "gasverbraucher",
+    "stromverbraucher",
+}
+BUNDLED_LAYERS = BUNDLED_BELOW_10 | BUNDLED_BELOW_6
 
 
 def tile_functions() -> dict[str, str]:
@@ -131,6 +145,15 @@ class TestFunctionLayers:
         for name, body in tile_functions().items():
             assert "RETURN coalesce(result, ''::bytea);" in body, name
 
+    def test_out_of_range_coordinates_return_an_empty_tile(self):
+        """ST_TileEnvelope raises for x/y outside 0..2^z-1 and Martin turns
+        that into a 500. A client error must not look like a server error, so
+        the guard runs before the envelope is built."""
+        for name, body in tile_functions().items():
+            assert "IF z < 0 OR z > 30 THEN" in body, name
+            assert "IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN" in body, name
+            assert body.index("IF x < 0") < body.index("ST_TileEnvelope"), name
+
 
 # (alias, MaStR column, expression) - added to every layer that has the column
 COMMON_FIELDS = [
@@ -192,20 +215,30 @@ class TestAttributes:
 
 
 class TestBundling:
-    def test_solar_and_storage_are_bundled_below_zoom_10(self):
+    def test_every_layer_is_bundled(self):
+        """A z0 tile of wind carries 43k units and grows to 4.7 MB; the
+        aggregated cell is what a map draws at that zoom anyway."""
+        assert set(tile_functions()) == BUNDLED_LAYERS
+
+    def test_bundling_threshold(self):
+        """Solar and Stromspeicher have millions of units and bundle up to
+        zoom 10; the other layers have tens of thousands and bundle below
+        zoom 6."""
+        for name in BUNDLED_BELOW_10:
+            assert "IF z < 10 THEN" in tile_functions()[name], name
+        for name in BUNDLED_BELOW_6:
+            assert "IF z < 6 THEN" in tile_functions()[name], name
+
+    def test_bundled_branch_aggregates_per_cell(self):
         """A z5 tile with all solar units would contain hundreds of thousands
         of points and grow to several megabytes."""
         for name in BUNDLED_LAYERS:
-            body = tile_functions()[name]
-            assert "IF z < 10 THEN" in body, name
+            bundled = tile_functions()[name].split("ELSE")[0]
             # cell size = tile width / 64, computed in degrees
-            assert "(ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon" in body, name
-            assert "(ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat" in body, name
-            assert "count(*) AS anzahl" in body, name
-            assert "sum(e.nettonennleistung::float8) AS kw" in body, name
-            assert "GROUP BY 1, 2" in body, name
-            # the bundled features carry the count and the summed power
-            assert "c.anzahl, c.kw" in body, name
+            assert "(ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon" in bundled, name
+            assert "(ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat" in bundled, name
+            assert "count(*) AS anzahl" in bundled, name
+            assert "GROUP BY 1, 2" in bundled, name
 
     def test_bundled_layers_project_the_cells_not_the_units(self):
         """A projection per unit is what made a z1 tile take 30 s: the bundled
@@ -221,12 +254,17 @@ class TestBundling:
             assert "ELSE" in body, name
             assert "e.einheitmastrnummer AS mastr_nr" in body, name
 
-    def test_other_layers_are_not_bundled(self):
-        for name, body in tile_functions().items():
-            if name in BUNDLED_LAYERS:
-                continue
-            assert "ST_SnapToGrid" not in body, name
-            assert "e.einheitmastrnummer AS mastr_nr" in body, name
+    def test_bundled_features_carry_the_power_where_the_layer_has_one(self):
+        """Stromverbraucher has no power column in the MaStR, so its cells
+        carry the count only."""
+        for name in BUNDLED_LAYERS:
+            bundled = tile_functions()[name].split("ELSE")[0]
+            if name == "stromverbraucher":
+                assert "sum(" not in bundled, name
+                assert "c.anzahl, c.kw" not in bundled, name
+            else:
+                assert "sum(e." in bundled, name
+                assert "c.anzahl, c.kw" in bundled, name
 
 
 class TestSchemaAndGrants:
