@@ -35,6 +35,8 @@ concurrent streams instead.
 """
 
 import argparse
+import asyncio
+import contextlib
 import math
 import random
 import re
@@ -42,6 +44,7 @@ import shutil
 import struct
 import sys
 import textwrap
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -78,7 +81,7 @@ W_LAYER, W_STATUS, W_SIZE, W_FEATURES, W_ATTRS = 22, 6, 9, 8, 10
 
 
 class SessionPool:
-    """One httpx.Client holding a fixed number of keep-alive connections.
+    """A fixed set of keep-alive connections to the tile server.
 
     HTTP/1.1: the pool size is the number of TCP connections. The script opens
     that many once and reuses them, instead of a new connection (and a new TLS
@@ -86,28 +89,49 @@ class SessionPool:
 
     HTTP/2: every request is a stream on a single connection, so the pool is
     capped at one connection and the pool size only limits how many requests
-    run at the same time. httpx.Client is thread safe, so the workers share it
-    directly.
+    run at the same time.
+
+    The requests are driven by an httpx.AsyncClient on a private event loop,
+    because httpx's sync HTTP/2 client is not safe to share between threads:
+    concurrent reads on one connection fail with EAGAIN and poison it for every
+    request in flight. The workers submit to the loop and wait for the result.
     """
 
     def __init__(self, size: int, http2: bool = False, verify: bool = True):
         connections = 1 if http2 else size
-        self._client = httpx.Client(
+        self._client = httpx.AsyncClient(
             http2=http2,
             verify=verify,
             limits=httpx.Limits(max_connections=connections, max_keepalive_connections=connections),
         )
+        self._loop = asyncio.new_event_loop()
+        self._ready = threading.Event()
+        self._thread = threading.Thread(target=self._serve, daemon=True)
+        self._thread.start()
+        self._ready.wait()
+
+    def _serve(self) -> None:
+        asyncio.set_event_loop(self._loop)
+        self._ready.set()
+        self._loop.run_forever()
 
     def __enter__(self) -> "SessionPool":
         return self
 
     def __exit__(self, *exc_info) -> None:
-        self._client.close()
+        # a failed close must not keep the loop thread alive
+        with contextlib.suppress(Exception):
+            asyncio.run_coroutine_threadsafe(self._client.aclose(), self._loop).result(timeout=5)
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join(timeout=5)
+        self._loop.close()
 
     def request(self, method: str, url: str, **kwargs) -> httpx.Response:
-        """Send one request. The response body is read before the call
-        returns, so the connection is free again for the next request."""
-        return self._client.request(method, url, **kwargs)
+        """Send one request on the event loop and wait for the response. The
+        body is read before the call returns, so the connection is free again
+        for the next request."""
+        future = asyncio.run_coroutine_threadsafe(self._client.request(method, url, **kwargs), self._loop)
+        return future.result()
 
 
 # --- Mapbox Vector Tile decoding (protobuf, no external dependency) ---------

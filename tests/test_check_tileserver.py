@@ -316,14 +316,19 @@ def https_server(tls_certificate):
 
 
 def test_http2_multiplexes_concurrent_requests(h2_server):
-    """Twenty requests on a pool of five must share one h2 connection."""
+    """A thousand requests on a pool of five must share one h2 connection.
+
+    The count matters: sharing a sync httpx connection between threads used to
+    fail with ReadError(EAGAIN) after a few hundred requests, and the poisoned
+    connection then failed every request in flight.
+    """
     with SessionPool(5, http2=True, verify=False) as pool, ThreadPoolExecutor(max_workers=5) as executor:
         responses = list(
-            executor.map(lambda _: pool.request("GET", f"{h2_server.base_url}/health", timeout=5), range(20))
+            executor.map(lambda _: pool.request("GET", f"{h2_server.base_url}/health", timeout=5), range(1000))
         )
     assert {response.http_version for response in responses} == {"HTTP/2"}
     assert h2_server.connections == 1
-    assert h2_server.streams == 20
+    assert h2_server.streams == 1000
 
 
 def test_http2_flag_reports_the_protocol(h2_server, monkeypatch, capsys):
