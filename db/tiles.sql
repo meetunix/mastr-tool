@@ -38,6 +38,20 @@
 
 CREATE SCHEMA IF NOT EXISTS tiles;
 
+-- Pre-aggregated grid for the low zoom tiles: one row per ~1 km cell and
+-- layer, holding the number of units and their summed power. A z4 tile of
+-- solar aggregates 266k units; scanning them takes 30 s because the GiST
+-- index does random heap access over the 2 GB table. The grid is rebuilt by
+-- db/grid.sql after every import.
+CREATE TABLE IF NOT EXISTS tiles.grid (
+    layer text NOT NULL,
+    cx integer NOT NULL,
+    cy integer NOT NULL,
+    anzahl bigint NOT NULL,
+    kw double precision,
+    PRIMARY KEY (layer, cx, cy)
+);
+
 -- Windenergieanlagen
 CREATE OR REPLACE FUNCTION tiles.wind(z integer, x integer, y integer)
 RETURNS bytea
@@ -59,23 +73,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.nettonennleistung::float8) AS kw
-            FROM einheitenwind e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'wind'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -153,6 +171,7 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
+    -- below z10 a tile would carry thousands of individual points
     IF z < 10 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
@@ -160,24 +179,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point, and at
-            -- z1 that is a projection for every solar unit in the country.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.nettonennleistung::float8) AS kw
-            FROM einheitensolar e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'solar'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -264,23 +286,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.nettonennleistung::float8) AS kw
-            FROM einheitenbiomasse e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'biomasse'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -362,23 +388,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.nettonennleistung::float8) AS kw
-            FROM einheitenwasser e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'wasser'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -458,23 +488,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.nettonennleistung::float8) AS kw
-            FROM einheitengeothermiegrubengasdruckentspannung e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'geothermie'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -546,6 +580,7 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
+    -- below z10 a tile would carry thousands of individual points
     IF z < 10 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
@@ -553,24 +588,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point, and at
-            -- z1 that is a projection for every storage unit in the country.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.nettonennleistung::float8) AS kw
-            FROM einheitenstromspeicher e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'stromspeicher'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -655,23 +693,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.nettonennleistung::float8) AS kw
-            FROM einheitenkernkraft e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'kernkraft'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -753,23 +795,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.nettonennleistung::float8) AS kw
-            FROM einheitenverbrennung e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'verbrennung'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -854,23 +900,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.erzeugungsleistung::float8) AS kw
-            FROM einheitengaserzeuger e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'gaserzeuger'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -946,23 +996,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.maximaleeinspeicherleistung::float8) AS kw
-            FROM einheitengasspeicher e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'gasspeicher'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -1040,23 +1094,27 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl,
-                   sum(e.maximalegasbezugsleistung::float8) AS kw
-            FROM einheitengasverbraucher e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl,
+                   sum(c.kw) AS kw
+            FROM tiles.grid c, g
+            WHERE c.layer = 'gasverbraucher'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (
@@ -1132,22 +1190,26 @@ BEGIN
         ),
         g AS (
             -- cell size = tile width / 64, so the cells line up with the tile
-            -- edges and a tile has at most 4096 features. The grid is computed
-            -- in degrees: snapping in 3857 needs a projection per point.
+            -- edges and a tile has at most 4096 features
             SELECT ST_XMin(env4326) AS lon0,
                    ST_YMin(env4326) AS lat0,
+                   ST_XMax(env4326) AS lon1,
+                   ST_YMax(env4326) AS lat1,
                    (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
                    (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
             FROM b
         ),
         cells AS (
-            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
-                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
-                   count(*) AS anzahl
-            FROM einheitenstromverbraucher e, g, b
-            WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
-              AND e.breitengrad BETWEEN -90 AND 90
-              AND e.laengengrad BETWEEN -180 AND 180
+            -- the grid holds the units per ~1 km cell (db/grid.sql): a low
+            -- zoom tile aggregates a few thousand rows instead of scanning the
+            -- unit table, whose GiST index does random heap access
+            SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
+                   floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
+                   sum(c.anzahl) AS anzahl
+            FROM tiles.grid c, g
+            WHERE c.layer = 'stromverbraucher'
+              AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int
+              AND c.cy BETWEEN floor((g.lat0 + 90) / 0.01)::int AND floor((g.lat1 + 90) / 0.01)::int
             GROUP BY 1, 2
         ),
         f AS (

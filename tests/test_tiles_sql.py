@@ -14,6 +14,7 @@ import pytest
 from db.entities import Einheiten, GeomIndices, MAP_INDEX_CONDITION
 
 TILES_SQL = Path(__file__).resolve().parent.parent / "db" / "tiles.sql"
+GRID_SQL = Path(__file__).resolve().parent.parent / "db" / "grid.sql"
 UDF_SQL = Path(__file__).resolve().parent.parent / "db" / "udf.sql"
 
 # Martin only publishes functions with z, x, y as the first three parameters
@@ -237,8 +238,19 @@ class TestBundling:
             # cell size = tile width / 64, computed in degrees
             assert "(ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon" in bundled, name
             assert "(ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat" in bundled, name
-            assert "count(*) AS anzahl" in bundled, name
+            assert "sum(c.anzahl) AS anzahl" in bundled, name
             assert "GROUP BY 1, 2" in bundled, name
+
+    def test_bundled_branch_reads_the_pre_aggregated_grid(self):
+        """Scanning the unit table at low zoom costs 30 s: the GiST index does
+        random heap access over the 2 GB table. The bundled branch reads
+        tiles.grid (db/grid.sql) instead."""
+        for name in BUNDLED_LAYERS:
+            bundled = tile_functions()[name].split("ELSE")[0]
+            assert "FROM tiles.grid c" in bundled, name
+            assert f"c.layer = '{name}'" in bundled, name
+            assert "FROM einheiten" not in bundled, name
+            assert "FROM einheitensolar" not in bundled, name
 
     def test_bundled_layers_project_the_cells_not_the_units(self):
         """A projection per unit is what made a z1 tile take 30 s: the bundled
@@ -260,11 +272,41 @@ class TestBundling:
         for name in BUNDLED_LAYERS:
             bundled = tile_functions()[name].split("ELSE")[0]
             if name == "stromverbraucher":
-                assert "sum(" not in bundled, name
+                assert "sum(c.kw)" not in bundled, name
                 assert "c.anzahl, c.kw" not in bundled, name
             else:
-                assert "sum(e." in bundled, name
+                assert "sum(c.kw) AS kw" in bundled, name
                 assert "c.anzahl, c.kw" in bundled, name
+
+
+class TestGrid:
+    """db/grid.sql rebuilds the pre-aggregated grid the low zoom tiles read."""
+
+    def test_grid_is_truncated_before_the_rebuild(self):
+        assert "TRUNCATE tiles.grid;" in GRID_SQL.read_text()
+
+    def test_every_layer_is_in_the_grid(self):
+        sql = GRID_SQL.read_text()
+        for name in tile_functions():
+            assert f"SELECT '{name}'," in sql, name
+
+    def test_grid_uses_the_same_tables_as_the_tile_functions(self):
+        """A renamed table would leave the grid empty for that layer, and its
+        low zoom tiles would silently be empty."""
+        sql = GRID_SQL.read_text()
+        for name, body in tile_functions().items():
+            table = source_table(body)
+            assert f"FROM {table}\n" in sql, f"{name}: {table}"
+
+    def test_grid_cell_size_matches_the_tile_functions(self):
+        """The functions map grid cells back with the same 0.01 degree size."""
+        sql = GRID_SQL.read_text()
+        assert "floor((laengengrad::float8 + 180) / 0.01)::int" in sql
+        assert "floor((breitengrad::float8 + 90) / 0.01)::int" in sql
+        for name in BUNDLED_LAYERS:
+            bundled = tile_functions()[name].split("ELSE")[0]
+            assert "(c.cx + 0.5) * 0.01 - 180" in bundled, name
+            assert "(c.cy + 0.5) * 0.01 - 90" in bundled, name
 
 
 class TestSchemaAndGrants:
@@ -306,9 +348,11 @@ class TestIndexCondition:
 
 
 @pytest.mark.parametrize("name", sorted(BUNDLED_LAYERS))
-def test_bundled_layer_keeps_the_bbox_filter_in_both_branches(name):
+def test_bundled_layer_keeps_the_bbox_filter_in_the_detail_branch(name):
+    """The bundled branch reads the grid, only the detail branch scans the
+    unit table and needs the GiST filter."""
     body = tile_functions()[name]
-    assert body.count("&& b.env4326") == 2
+    assert body.count("&& b.env4326") == 1
 
 
 class TestCachePurge:

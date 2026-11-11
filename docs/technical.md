@@ -77,10 +77,15 @@ Katalogwerte (`status`, `art`, `brennstoff`, `hersteller`, `technologie`, …) b
 spart Bytes gegenüber `katalog()`. Die Auswahl steht in `db/tiles.sql`.
 
 Jeder Layer bündelt seine Punkte unterhalb einer Zoomstufe je Rasterzelle (64 × 64 Zellen pro Kachel) zu einem
-Feature mit `anzahl` und `kw`; darüber kommt jede Einheit einzeln. Die Zellen liegen in Grad, damit keine Projektion
-pro Punkt nötig ist. Die Grenze hängt an der Zahl der Einheiten: Solar und Stromspeicher haben Millionen Einheiten und
-bündeln bis Zoom 10, die übrigen Layer haben einige zehntausend und bündeln unterhalb von Zoom 7. `stromverbraucher`
-hat im MaStR keine Leistungsspalte, seine Zellen tragen nur `anzahl`.
+Feature mit `anzahl` und `kw`; darüber kommt jede Einheit einzeln. Die Grenze hängt an der Zahl der Einheiten: Solar
+und Stromspeicher haben Millionen Einheiten und bündeln bis Zoom 10, die übrigen Layer haben einige zehntausend und
+bündeln unterhalb von Zoom 7. `stromverbraucher` hat im MaStR keine Leistungsspalte, seine Zellen tragen nur `anzahl`.
+
+Die gebündelten Kacheln lesen nicht die Einheiten-Tabellen, sondern `tiles.grid`: eine Zeile je ~1-km-Zelle
+(0,01 Grad) und Layer mit der Zahl der Einheiten und ihrer summierten Leistung. `db/grid.sql` baut die Tabelle nach
+jedem Import neu auf (`refresh_tile_grid` in `import_mastr.py`). Der Grund ist die I/O: eine z4-Kachel von Solar
+aggregiert 266.000 Einheiten, und ein Scan über die 2-GB-Tabelle kostet 30 s, weil der GiST-Index die Zeilen in
+zufälliger Reihenfolge von der Platte liest (203.000 Blöcke, 1,6 GB). Aus dem Grid sind es wenige tausend Zeilen.
 
 Ohne Bündelung wäre eine z0-Kachel von `wind` 4,7 MB groß (43.000 Einheiten, gzip 1,5 MB); gebündelt sind es rund
 50–100 kB. Eine z10-Kachel mit rund 10.000 Solaranlagen liegt unkomprimiert im Bereich einiger hundert KB bis etwa

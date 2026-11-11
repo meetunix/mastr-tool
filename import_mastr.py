@@ -194,6 +194,17 @@ def write_constraints(path_constraints: Path) -> None:
     conn.close()
 
 
+def refresh_tile_grid(path_grid: Path) -> None:
+    """Rebuild the pre-aggregated grid the low zoom tiles are built from
+    (db/grid.sql). Runs after the unit tables are loaded: the tile functions
+    read the grid instead of scanning the unit tables."""
+    conn = get_db_connection()
+    with conn.cursor() as curr:
+        curr.execute(path_grid.read_text())
+        conn.commit()
+    conn.close()
+
+
 def vacuum_analyze() -> None:
     """Collect planner statistics and set the visibility map of the freshly
     loaded tables before they are exported."""
@@ -206,6 +217,7 @@ def vacuum_analyze() -> None:
             # parallel vacuum reserves its memory in /dev/shm (64MB in
             # containers by default), which fails on Postgres up to 16
             curr.execute(f"VACUUM (ANALYZE, PARALLEL 0) {table.name}")
+        curr.execute("VACUUM (ANALYZE, PARALLEL 0) tiles.grid")
     conn.close()
 
 
@@ -232,6 +244,7 @@ def delete_tables() -> None:
 def main():
     path_udf = Path("db/udf.sql")
     path_tiles = Path("db/tiles.sql")
+    path_grid = Path("db/grid.sql")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--concurrency", type=int, default=4, help="Number of parallel import processes (default: 4)")
     parser.add_argument(
@@ -285,6 +298,8 @@ def main():
 
     logger.info("create primary keys and indices")
     write_constraints(path_constraints)
+    logger.info("rebuild the tile grid")
+    refresh_tile_grid(path_grid)
     logger.info("vacuum and analyze tables")
     vacuum_analyze()
     enable_autovacuum()
