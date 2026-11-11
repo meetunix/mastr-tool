@@ -2,13 +2,27 @@
 
 The decoder is the only non-trivial part of the script. It is checked against
 tiles built by hand, so a broken decoder cannot silently report empty tiles.
+The connection pool is checked against a local server that counts the TCP
+connections it accepts.
 """
 
+import json
 import struct
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
-from check_tileserver import FALLBACK_LAYERS, decode_mvt, deg2tile, expected_layers, percentile
+from check_tileserver import (
+    FALLBACK_LAYERS,
+    SessionPool,
+    decode_mvt,
+    deg2tile,
+    expected_layers,
+    main,
+    percentile,
+)
 
 
 def varint(value: int) -> bytes:
@@ -142,3 +156,94 @@ def test_fallback_layers_match_the_sql():
     """FALLBACK_LAYERS is only used when db/tiles.sql is missing, but it must
     not drift from the real layer list."""
     assert sorted(FALLBACK_LAYERS) == sorted(expected_layers())
+
+
+# --- connection pool -------------------------------------------------------
+
+
+class CountingServer(ThreadingHTTPServer):
+    """HTTP server that counts the TCP connections it accepts."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.connections = 0
+
+    def get_request(self):
+        request, address = super().get_request()
+        self.connections += 1
+        return request, address
+
+
+class TileHandler(BaseHTTPRequestHandler):
+    """Answers like Martin: health, catalog and empty tiles."""
+
+    protocol_version = "HTTP/1.1"
+
+    def do_GET(self):
+        if self.path == "/health":
+            self._send(200, b"OK", "text/plain")
+        elif self.path == "/catalog":
+            body = json.dumps({"tiles": {f"tiles.{name}": {} for name in expected_layers()}}).encode()
+            self._send(200, body, "application/json")
+        else:
+            self._send(204, b"", "application/x-protobuf")
+
+    def do_DELETE(self):
+        self._send(200, b"purged", "text/plain")
+
+    def _send(self, status: int, body: bytes, content_type: str) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=3600")
+        self.end_headers()
+        if body:
+            self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+@pytest.fixture
+def tile_server():
+    server = CountingServer(("127.0.0.1", 0), TileHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server, f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_session_pool_reuses_one_connection(tile_server):
+    """Five requests through a pool of one must not open five connections."""
+    server, base = tile_server
+    with SessionPool(1) as pool:
+        for _ in range(5):
+            assert pool.request("GET", f"{base}/health", timeout=5).status_code == 200
+    assert server.connections == 1
+
+
+def test_benchmark_holds_the_configured_connections(tile_server, monkeypatch):
+    """The benchmark runs on --concurrency connections, not one per tile."""
+    server, base = tile_server
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "check_tileserver.py",
+            "--url",
+            base,
+            "--benchmark",
+            "--requests",
+            "20",
+            "--concurrency",
+            "5",
+            "--seed",
+            "1",
+        ],
+    )
+    assert main() == 0
+    assert 1 <= server.connections <= 5
