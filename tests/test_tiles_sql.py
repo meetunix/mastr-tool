@@ -198,12 +198,22 @@ class TestBundling:
         for name in BUNDLED_LAYERS:
             body = tile_functions()[name]
             assert "IF z < 10 THEN" in body, name
-            assert "ST_SnapToGrid(p.geom, (ST_XMax(b.env) - ST_XMin(b.env)) / 64.0)" in body, name
+            # cell size = tile width / 64, computed in degrees
+            assert "(ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon" in body, name
+            assert "(ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat" in body, name
             assert "count(*) AS anzahl" in body, name
-            assert "sum(p.kw) AS kw" in body, name
-            assert "GROUP BY 1" in body, name
+            assert "sum(e.nettonennleistung::float8) AS kw" in body, name
+            assert "GROUP BY 1, 2" in body, name
             # the bundled features carry the count and the summed power
-            assert "ST_AsMVTGeom(c.geom, b.env) AS geom, c.anzahl, c.kw" in body, name
+            assert "c.anzahl, c.kw" in body, name
+
+    def test_bundled_layers_project_the_cells_not_the_units(self):
+        """A projection per unit is what made a z1 tile take 30 s: the bundled
+        branch transforms the grid cells (at most 4096), not every point."""
+        for name in BUNDLED_LAYERS:
+            bundled = tile_functions()[name].split("ELSE")[0]
+            assert "ST_Transform(ST_SetSRID(ST_MakePoint(e." not in bundled, name
+            assert "ST_SnapToGrid" not in bundled, name
 
     def test_bundled_layers_also_have_the_detail_level(self):
         for name in BUNDLED_LAYERS:

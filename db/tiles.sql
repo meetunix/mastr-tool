@@ -100,26 +100,39 @@ BEGIN
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
         ),
-        pts AS (
-            SELECT ST_Transform(ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326), 3857) AS geom,
-                   e.nettonennleistung::float8 AS kw
-            FROM einheitensolar e, b
+        g AS (
+            -- cell size = tile width / 64, so the cells line up with the tile
+            -- edges and a tile has at most 4096 features. The grid is computed
+            -- in degrees: snapping in 3857 needs a projection per point, and at
+            -- z1 that is a projection for every solar unit in the country.
+            SELECT ST_XMin(env4326) AS lon0,
+                   ST_YMin(env4326) AS lat0,
+                   (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
+                   (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
+            FROM b
+        ),
+        cells AS (
+            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
+                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
+                   count(*) AS anzahl,
+                   sum(e.nettonennleistung::float8) AS kw
+            FROM einheitensolar e, g, b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
               AND e.laengengrad BETWEEN -180 AND 180
-        ),
-        cells AS (
-            -- cell size = tile width / 64, so the cells line up with the
-            -- tile edges and a tile has at most 4096 features
-            SELECT ST_SnapToGrid(p.geom, (ST_XMax(b.env) - ST_XMin(b.env)) / 64.0) AS geom,
-                   count(*) AS anzahl,
-                   sum(p.kw) AS kw
-            FROM pts p, b
-            GROUP BY 1
+            GROUP BY 1, 2
         ),
         f AS (
-            SELECT ST_AsMVTGeom(c.geom, b.env) AS geom, c.anzahl, c.kw
-            FROM cells c, b
+            -- one projection per cell (at most 4096), not per unit
+            SELECT ST_AsMVTGeom(
+                       ST_Transform(
+                           ST_SetSRID(ST_MakePoint(g.lon0 + (c.cx + 0.5) * g.dlon,
+                                                   g.lat0 + (c.cy + 0.5) * g.dlat), 4326),
+                           3857),
+                       b.env
+                   ) AS geom,
+                   c.anzahl, c.kw
+            FROM cells c, g, b
         )
         SELECT ST_AsMVT(f, 'solar') INTO result FROM f;
     ELSE
@@ -330,26 +343,39 @@ BEGIN
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
         ),
-        pts AS (
-            SELECT ST_Transform(ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326), 3857) AS geom,
-                   e.nettonennleistung::float8 AS kw
-            FROM einheitenstromspeicher e, b
+        g AS (
+            -- cell size = tile width / 64, so the cells line up with the tile
+            -- edges and a tile has at most 4096 features. The grid is computed
+            -- in degrees: snapping in 3857 needs a projection per point, and at
+            -- z1 that is a projection for every storage unit in the country.
+            SELECT ST_XMin(env4326) AS lon0,
+                   ST_YMin(env4326) AS lat0,
+                   (ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon,
+                   (ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat
+            FROM b
+        ),
+        cells AS (
+            SELECT floor((e.laengengrad - g.lon0) / g.dlon)::int AS cx,
+                   floor((e.breitengrad - g.lat0) / g.dlat)::int AS cy,
+                   count(*) AS anzahl,
+                   sum(e.nettonennleistung::float8) AS kw
+            FROM einheitenstromspeicher e, g, b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
               AND e.laengengrad BETWEEN -180 AND 180
-        ),
-        cells AS (
-            -- cell size = tile width / 64, so the cells line up with the
-            -- tile edges and a tile has at most 4096 features
-            SELECT ST_SnapToGrid(p.geom, (ST_XMax(b.env) - ST_XMin(b.env)) / 64.0) AS geom,
-                   count(*) AS anzahl,
-                   sum(p.kw) AS kw
-            FROM pts p, b
-            GROUP BY 1
+            GROUP BY 1, 2
         ),
         f AS (
-            SELECT ST_AsMVTGeom(c.geom, b.env) AS geom, c.anzahl, c.kw
-            FROM cells c, b
+            -- one projection per cell (at most 4096), not per unit
+            SELECT ST_AsMVTGeom(
+                       ST_Transform(
+                           ST_SetSRID(ST_MakePoint(g.lon0 + (c.cx + 0.5) * g.dlon,
+                                                   g.lat0 + (c.cy + 0.5) * g.dlat), 4326),
+                           3857),
+                       b.env
+                   ) AS geom,
+                   c.anzahl, c.kw
+            FROM cells c, g, b
         )
         SELECT ST_AsMVT(f, 'stromspeicher') INTO result FROM f;
     ELSE
