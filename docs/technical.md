@@ -122,6 +122,41 @@ Ein Memory-Limit für den Container muss über 512 MiB Luft lassen – bei `limi
 Cache selbst in den OOM-Kill laufen. Die PMTiles-, Font- und Sprite-Caches bleiben leer, ihre Budgets werden nicht vorab
 belegt.
 
+## Speicherbudget (3 GiB)
+
+Die Box hat 3 GiB RAM, und der Import ist die Speicherspitze: er läuft parallel zu Postgres, Martin und der Web-UI.
+Bewusste Container-Limits gibt es nicht – der OOM-Killer des Hosts entscheidet selbst, wen er trifft, und das ist meist
+der größte Verbraucher. Ein paar GB Swap auf dem Host sind die günstigere Versicherung: die Datenbank lässt sich aus
+dem Dump neu aufbauen, ein OOM-Kill mitten im mehrstündigen Import kostet dagegen Stunden.
+
+| Verbraucher | RSS |
+| --- | --- |
+| OS + Docker | ~400 MB |
+| Postgres (256 MB `shared_buffers` + ~15 Backends) | ~450 MB |
+| Martin (512 MB Kachel-Cache + Overhead) | ~600 MB |
+| mastr-app | ~150 MB |
+| mastr-static | ~30 MB |
+| **Leerlauf** | **~1,6 GB** |
+| Import, 4 Worker (`iterparse` + COPY-Batches zu 1000 Zeilen) | ~400 MB |
+| `CREATE INDEX` (`maintenance_work_mem`) | ~260 MB |
+
+Damit bleiben im Peak rund 700 MB Luft. Drei Konsequenzen für Postgres:
+
+- `shared_buffers` bleibt bei 256 MB. Der OS-Page-Cache deckt den Rest, ein größerer Wert würde dem Import den Platz
+  wegnehmen.
+- `max_parallel_workers_per_gather` und `max_parallel_maintenance_workers` stehen auf 0: jeder Worker bekommt eigenes
+  `work_mem` und reserviert seinen Speicher in `/dev/shm`. Die Kachel-Abfragen sind Index-Scans und profitieren nicht
+  davon, und `import_mastr.py` setzt `maintenance_work_mem = 256MB` – ein paralleler Index-Build würde das mit der
+  Worker-Zahl multiplizieren.
+- `effective_cache_size` steht auf 1536 MB (die Hälfte des RAM), nicht auf dem Default von 4 GB: sonst rechnet der
+  Planer mit einem Page-Cache, den die Box nicht hat. `random_page_cost = 1.1` sagt ihm, dass die Daten auf einer SSD
+  liegen – die Kachel-Abfragen sind GiST-Index-Scans mit wahlfreiem Heap-Zugriff.
+
+Für die Rolle `tiles_reader` setzt `import_mastr.py` zusätzlich `jit = off` und `statement_timeout = '30s'`. JIT kostet
+bei den kurzen Kachel-Abfragen mehr, als es bringt; das Timeout verhindert, dass eine entartete Abfrage eine der acht
+Pool-Verbindungen von Martin blockiert. Beide Einstellungen hängen an der Rolle, damit der Import sein JIT für den
+Grid-Neuaufbau in `db/grid.sql` behält.
+
 ## Datenbankauszug `mastr-latest.sql`
 
 `pg_dump` schreibt die PostGIS-Extension und die GiST-Indizes mit, wer den Auszug einspielt, braucht also PostGIS.

@@ -50,6 +50,11 @@ services:
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
       - PGDATA=/var/lib/postgresql/18/data
     # small WAL footprint: 256MB ceiling keeps pg_wal to a few hundred MB
+    # The read path for Martin is tuned for a 3 GiB box (see the memory budget
+    # in docs/technical.md): shared_buffers stays at 256MB, the planner is told
+    # the truth about the page cache, and the parallel workers are off - they
+    # multiply work_mem and reserve their memory in /dev/shm, while the tile
+    # queries are index scans that gain nothing from them.
     command: >
       postgres
       -c max_wal_size=256MB
@@ -61,6 +66,10 @@ services:
       -c synchronous_commit=off
       -c bgwriter_lru_maxpages=200
       -c bgwriter_delay=50ms
+      -c effective_cache_size=1536MB
+      -c random_page_cost=1.1
+      -c max_parallel_workers_per_gather=0
+      -c max_parallel_maintenance_workers=0
     volumes:
       - mastr-database:/var/lib/postgresql/18/data
     healthcheck:

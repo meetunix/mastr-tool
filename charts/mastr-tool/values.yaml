@@ -155,6 +155,11 @@ database:
       synchronous_commit: "off"
       bgwriter_lru_maxpages: "200"
       bgwriter_delay: 50ms
+      # read path for Martin, tuned for a 3 GiB box (docs/technical.md)
+      effective_cache_size: 1536MB
+      random_page_cost: "1.1"
+      max_parallel_workers_per_gather: "0"
+      max_parallel_maintenance_workers: "0"
     resources: {}
       # requests: { cpu: "500m", memory: "1Gi" }
     nodeSelector: {}

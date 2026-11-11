@@ -327,6 +327,19 @@ class TestCreateTilesRole:
 
         assert connection.cursors[0].executed_params[1] == (import_mastr.TILES_DB_PASSWORD_DEFAULT,)
 
+    def test_role_gets_the_tile_server_settings(self, monkeypatch):
+        """JIT costs more than it saves for the short tile queries, and a
+        runaway query must not hold one of Martin's pool connections. Both are
+        role settings, so the import keeps JIT for the grid rebuild."""
+        connection = FakeConnection()
+        monkeypatch.setattr(import_mastr, "get_db_connection", lambda: connection)
+
+        import_mastr.create_tiles_role()
+
+        executed = connection.cursors[0].executed
+        assert "ALTER ROLE tiles_reader SET jit = off" in executed
+        assert "ALTER ROLE tiles_reader SET statement_timeout = '30s'" in executed
+
     def test_missing_createrole_does_not_abort_the_import(self, monkeypatch):
         """A CloudNativePG managed role has no CREATEROLE: the role has to be
         created by an administrator, the import must still run."""

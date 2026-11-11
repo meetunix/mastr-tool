@@ -39,6 +39,9 @@ endpoints:
 
 postgres:
   connection_string: ${MARTIN_DATABASE_URL}
+  # 8 concurrent tile queries is already more than the cores of the 3 GiB box
+  # can render; the default of 20 only adds Postgres backends and contention
+  pool_size: 8
   auto_publish:
     functions:
       from_schemas: [tiles]

@@ -158,6 +158,12 @@ def create_tiles_role() -> None:
             # name is a constant, only the password is a parameter.
             statement = "ALTER ROLE" if exists else "CREATE ROLE"
             curr.execute(f"{statement} {TILES_DB_USER} WITH LOGIN PASSWORD %s", (password,))
+            # the tile queries are short index scans: JIT compilation costs more
+            # than it saves, and a runaway query must not hold one of Martin's
+            # pool connections. Both are role settings, so the import keeps JIT
+            # for the grid rebuild in db/grid.sql.
+            curr.execute(f"ALTER ROLE {TILES_DB_USER} SET jit = off")
+            curr.execute(f"ALTER ROLE {TILES_DB_USER} SET statement_timeout = '30s'")
         conn.commit()
         logger.info(f"role {TILES_DB_USER} for Martin is ready")
     except psycopg2.errors.InsufficientPrivilege:

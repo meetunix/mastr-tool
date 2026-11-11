@@ -60,6 +60,11 @@ class TestServer:
         assert "tile_size_mb: 512" in lines
         assert "tile_expiry: 12h" in lines
 
+    def test_pool_size_fits_the_box(self):
+        """The default of 20 connections is more than the 3 GiB box can render -
+        every extra connection is a Postgres backend and CPU contention."""
+        assert "pool_size: 8" in config_lines()
+
     def test_cache_skips_the_overzoom_levels(self):
         """Clients overzoom beyond z14, so caching those tiles only wastes RAM."""
         assert "maxzoom: 14" in config_lines()

@@ -103,6 +103,14 @@ spec:
             - bgwriter_lru_maxpages={{ $db.postgresqlParams.bgwriter_lru_maxpages }}
             - -c
             - bgwriter_delay={{ $db.postgresqlParams.bgwriter_delay }}
+            - -c
+            - effective_cache_size={{ $db.postgresqlParams.effective_cache_size }}
+            - -c
+            - random_page_cost={{ $db.postgresqlParams.random_page_cost }}
+            - -c
+            - max_parallel_workers_per_gather={{ $db.postgresqlParams.max_parallel_workers_per_gather }}
+            - -c
+            - max_parallel_maintenance_workers={{ $db.postgresqlParams.max_parallel_maintenance_workers }}
           ports:
             - name: postgres
               containerPort: 5432
