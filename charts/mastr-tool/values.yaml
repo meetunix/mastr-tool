@@ -101,7 +101,11 @@ database:
     storageClassName: ""
     # Postgres tuning flags (mirrors the `command:` block in compose).
     postgresqlParams:
-      max_wal_size: 1GB
+      # small WAL footprint: 128MB ceiling, 32MB recycling floor and no
+      # recycled-segment pool, so pg_wal stays well under 300MB
+      max_wal_size: 128MB
+      min_wal_size: 32MB
+      wal_recycle: "off"
       checkpoint_timeout: 15min
       checkpoint_completion_target: "0.9"
       wal_buffers: 16MB

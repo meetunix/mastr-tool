@@ -88,6 +88,10 @@ spec:
             - -c
             - max_wal_size={{ $db.postgresqlParams.max_wal_size }}
             - -c
+            - min_wal_size={{ $db.postgresqlParams.min_wal_size }}
+            - -c
+            - wal_recycle={{ $db.postgresqlParams.wal_recycle }}
+            - -c
             - checkpoint_timeout={{ $db.postgresqlParams.checkpoint_timeout }}
             - -c
             - checkpoint_completion_target={{ $db.postgresqlParams.checkpoint_completion_target }}
