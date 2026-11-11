@@ -79,7 +79,7 @@ spart Bytes gegenüber `katalog()`. Die Auswahl steht in `db/tiles.sql`.
 Jeder Layer bündelt seine Punkte unterhalb einer Zoomstufe je Rasterzelle (64 × 64 Zellen pro Kachel) zu einem
 Feature mit `anzahl` und `kw`; darüber kommt jede Einheit einzeln. Die Zellen liegen in Grad, damit keine Projektion
 pro Punkt nötig ist. Die Grenze hängt an der Zahl der Einheiten: Solar und Stromspeicher haben Millionen Einheiten und
-bündeln bis Zoom 10, die übrigen Layer haben einige zehntausend und bündeln unterhalb von Zoom 6. `stromverbraucher`
+bündeln bis Zoom 10, die übrigen Layer haben einige zehntausend und bündeln unterhalb von Zoom 7. `stromverbraucher`
 hat im MaStR keine Leistungsspalte, seine Zellen tragen nur `anzahl`.
 
 Ohne Bündelung wäre eine z0-Kachel von `wind` 4,7 MB groß (43.000 Einheiten, gzip 1,5 MB); gebündelt sind es rund

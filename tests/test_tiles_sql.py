@@ -29,7 +29,7 @@ FUNCTION_PATTERN = re.compile(
 # every layer bundles its points per grid cell below a zoom: solar and
 # stromspeicher have millions of units, the other layers tens of thousands
 BUNDLED_BELOW_10 = {"solar", "stromspeicher"}
-BUNDLED_BELOW_6 = {
+BUNDLED_BELOW_7 = {
     "wind",
     "biomasse",
     "wasser",
@@ -41,7 +41,7 @@ BUNDLED_BELOW_6 = {
     "gasverbraucher",
     "stromverbraucher",
 }
-BUNDLED_LAYERS = BUNDLED_BELOW_10 | BUNDLED_BELOW_6
+BUNDLED_LAYERS = BUNDLED_BELOW_10 | BUNDLED_BELOW_7
 
 
 def tile_functions() -> dict[str, str]:
@@ -223,11 +223,11 @@ class TestBundling:
     def test_bundling_threshold(self):
         """Solar and Stromspeicher have millions of units and bundle up to
         zoom 10; the other layers have tens of thousands and bundle below
-        zoom 6."""
+        zoom 7."""
         for name in BUNDLED_BELOW_10:
             assert "IF z < 10 THEN" in tile_functions()[name], name
-        for name in BUNDLED_BELOW_6:
-            assert "IF z < 6 THEN" in tile_functions()[name], name
+        for name in BUNDLED_BELOW_7:
+            assert "IF z < 7 THEN" in tile_functions()[name], name
 
     def test_bundled_branch_aggregates_per_cell(self):
         """A z5 tile with all solar units would contain hundreds of thousands

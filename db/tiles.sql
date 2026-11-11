@@ -51,8 +51,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
@@ -256,8 +256,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
@@ -354,8 +354,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
@@ -450,8 +450,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
@@ -647,8 +647,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
@@ -745,8 +745,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
@@ -846,8 +846,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
@@ -938,8 +938,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
@@ -1032,8 +1032,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
@@ -1124,8 +1124,8 @@ BEGIN
     IF x < 0 OR y < 0 OR x >= (1 << z) OR y >= (1 << z) THEN
         RETURN ''::bytea;
     END IF;
-    -- below z6 a tile would carry thousands of individual points
-    IF z < 6 THEN
+    -- below z7 a tile would carry thousands of individual points
+    IF z < 7 THEN
         WITH b AS (
             SELECT ST_TileEnvelope(z, x, y) AS env,
                    ST_Transform(ST_TileEnvelope(z, x, y), 4326) AS env4326
