@@ -109,7 +109,7 @@ identisch
 zu `martin/config.yaml`); Verbindungs-URL und Port kommen über `MARTIN_DATABASE_URL` und `MARTIN_LISTEN_ADDRESSES` aus
 der Umgebung. Das Deployment wartet im Standalone-Modus auf die Datenbank.
 
-Der Kachel-Cache ist auf 1 GiB und eine TTL von 12 h konfiguriert (`cache` in `martin/config.yaml`). Nach jedem Import
+Der Kachel-Cache ist auf 512 MiB und eine TTL von 12 h konfiguriert (`cache` in `martin/config.yaml`). Nach jedem Import
 leert `download-mastr.sh` ihn über `DELETE /cache/{source_id}` (Endpunkt `endpoints.purge_cache`), damit die Karte
 sofort die neuen Daten zeigt. Die TTL ist nur noch das Sicherheitsnetz, falls der Purge nicht durchgeht; während des
 mehrstündigen Imports selbst liefert der Cache weiter die alten Kacheln, statt mit Fehlern zu antworten.
@@ -118,8 +118,8 @@ Die Adresse des Tile-Servers für den Purge kommt aus `MARTIN_URL` (Compose: `ht
 `http://<release>-martin:7800`). Ist sie leer oder Martin nicht erreichbar, wird nur gewarnt – der Import läuft
 weiter.
 
-Ein Memory-Limit für den Container muss über 1 GiB Luft lassen – bei `limits.memory: 1Gi` würde Martin durch den Cache
-selbst in den OOM-Kill laufen. Die PMTiles-, Font- und Sprite-Caches bleiben leer, ihre Budgets werden nicht vorab
+Ein Memory-Limit für den Container muss über 512 MiB Luft lassen – bei `limits.memory: 512Mi` würde Martin durch den
+Cache selbst in den OOM-Kill laufen. Die PMTiles-, Font- und Sprite-Caches bleiben leer, ihre Budgets werden nicht vorab
 belegt.
 
 ## Datenbankauszug `mastr-latest.sql`

@@ -56,8 +56,8 @@ class TestServer:
         the TTL is what makes the cache safe."""
         lines = config_lines()
         assert "cache: disable" not in lines
-        assert "size_mb: 1024" in lines
-        assert "tile_size_mb: 1024" in lines
+        assert "size_mb: 512" in lines
+        assert "tile_size_mb: 512" in lines
         assert "tile_expiry: 12h" in lines
 
     def test_cache_skips_the_overzoom_levels(self):

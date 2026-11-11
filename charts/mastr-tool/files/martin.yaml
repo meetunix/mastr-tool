@@ -21,9 +21,9 @@ listen_addresses: ${MARTIN_LISTEN_ADDRESSES:-0.0.0.0:7800}
 # Only the tile cache is used: the PMTiles, font and sprite caches are budgets
 # that stay empty (they allocate nothing until something is stored).
 cache:
-  size_mb: 1024
+  size_mb: 512
   # tiles get half of size_mb by default
-  tile_size_mb: 1024
+  tile_size_mb: 512
   tile_expiry: 12h
   maxzoom: 14
 cache_control: "public, max-age=3600"
