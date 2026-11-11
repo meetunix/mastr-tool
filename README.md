@@ -119,17 +119,17 @@ zusätzlich zu den Downloads, live aus der Datenbank. MVT enthält nur die Punkt
 
 ### Öffentlicher Server
 
-Eine öffentliche Instanz läuft unter **https://mastr-tile.nachtsieb.de** – ohne Schlüssel, CORS offen, mit denselben
+Eine öffentliche Instanz läuft unter **https://mastr-tiles.nachtsieb.de** – ohne Schlüssel, CORS offen, mit denselben
 Layern wie ein eigenes Deployment:
 
-| Adresse                                                  | Inhalt                |
-|----------------------------------------------------------|-----------------------|
-| `https://mastr-tile.nachtsieb.de/catalog`                | alle Layer            |
-| `https://mastr-tile.nachtsieb.de/tiles.wind`             | TileJSON einer Quelle |
-| `https://mastr-tile.nachtsieb.de/tiles.wind/{z}/{x}/{y}` | die Kachel            |
+| Adresse                                                   | Inhalt                |
+|-----------------------------------------------------------|-----------------------|
+| `https://mastr-tiles.nachtsieb.de/catalog`                | alle Layer            |
+| `https://mastr-tiles.nachtsieb.de/tiles.wind`             | TileJSON einer Quelle |
+| `https://mastr-tiles.nachtsieb.de/tiles.wind/{z}/{x}/{y}` | die Kachel            |
 
 **QGIS** (≥ 3.22): *Layer → Add Layer → Add Vector Tile Layer → New Generic Connection*, URL
-`https://mastr-tile.nachtsieb.de/tiles.wind/{z}/{x}/{y}`, Zoom 0–14, Style URL leer. Für die anderen Energieträger
+`https://mastr-tiles.nachtsieb.de/tiles.wind/{z}/{x}/{y}`, Zoom 0–14, Style URL leer. Für die anderen Energieträger
 nur `tiles.wind` ersetzen, siehe [technical doc](docs/technical.md#attribute-und-bündelung).
 
 **MapLibre** bindet die Kacheln als Vektorquelle ein:
@@ -137,7 +137,7 @@ nur `tiles.wind` ersetzen, siehe [technical doc](docs/technical.md#attribute-und
 ```js
 map.addSource("mastr-wind", {
   type: "vector",
-  tiles: ["https://mastr-tile.nachtsieb.de/tiles.wind/{z}/{x}/{y}"],
+  tiles: ["https://mastr-tiles.nachtsieb.de/tiles.wind/{z}/{x}/{y}"],
   minzoom: 0,
   maxzoom: 14,
 });
