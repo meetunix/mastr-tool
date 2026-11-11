@@ -65,6 +65,46 @@ mastrStatic:
   tolerations: []
   affinity: {}
 
+# --- Martin (Mapbox Vector Tiles of the units with coordinates) ---
+# Serves the function sources from db/tiles.sql live from the database, see
+# the README. The read-only role tiles_reader is created by mastr-tool.
+# The Martin configuration itself is files/martin.yaml (cache, Cache-Control,
+# published schemas); only the connection and the port are set here.
+martin:
+  enabled: true
+  image:
+    repository: ghcr.io/maplibre/martin
+    tag: "1.16.1"
+  # Port the container listens on. It is passed to Martin as
+  # MARTIN_LISTEN_ADDRESSES, so it overrides listen_addresses in the config.
+  containerPort: 7800
+  # Password of the read-only role tiles_reader. mastr-tool creates the role
+  # with this password, Martin connects with it. Change it for a public
+  # deployment; it must not contain URL special characters.
+  dbPassword: tiles
+  service:
+    type: ClusterIP
+    port: 7800
+  # Ingress exposing the tiles. Set enabled: true and configure host/path.
+  ingress:
+    enabled: false
+    className: ""                 # e.g. nginx, traefik
+    annotations: {}
+    hosts:
+      - host: mastr-tiles.local
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+      # - secretName: mastr-tiles-tls
+      #   hosts: [mastr-tiles.local]
+  # The tile cache in files/martin.yaml is configured for 1 GiB, so a memory
+  # limit must leave headroom above that (e.g. 1536Mi).
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
 # --- database ---
 # mode controls how the chart provisions / addresses Postgres:
 #   standalone : chart deploys its own Postgres StatefulSet (mirrors compose `db`).
@@ -88,8 +128,12 @@ database:
   # standalone-mode Postgres.
   standalone:
     image:
-      repository: postgres
-      tag: "18"
+      # PostGIS variant of the official image: the tile functions (db/tiles.sql)
+      # and the GiST indices on the unit tables need the extension. The image
+      # is built on the official postgres image, the existing data directory
+      # keeps working (no dump and restore needed).
+      repository: postgis/postgis
+      tag: "18-3.6"
     user: mastr
     password: password
     name: mastr

@@ -1,3 +1,9 @@
+-- PostGIS is needed for the GiST indices on the unit tables (see
+-- GeomIndices in db/entities.py) and for the tile functions in db/tiles.sql.
+-- The extension is part of the postgis/postgis image; on a database where it
+-- was created by an administrator (e.g. CloudNativePG) this is a no-op.
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 CREATE OR REPLACE FUNCTION katalog(integer) RETURNS text AS
 $$
     SELECT wert FROM katalogwerte WHERE id = $1

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 import re
 import sys
 import time
@@ -8,6 +9,8 @@ from multiprocessing import get_context
 from pathlib import Path
 from typing import Dict, List, Set
 
+import psycopg2
+
 from db.db_utils import DBElementWriter, get_db_connection
 from db.entities import *
 from utils.mastr_logger import get_mastr_logger, LogLevel
@@ -15,6 +18,10 @@ from utils.mastr_logger import get_mastr_logger, LogLevel
 logger = get_mastr_logger(LogLevel.INFO)
 
 FILE_PATTERN = re.compile(r"^(.*)_([0-9]{1,3}).xml$")
+
+# read-only role Martin connects with (see db/tiles.sql)
+TILES_DB_USER = "tiles_reader"
+TILES_DB_PASSWORD_DEFAULT = "tiles"
 
 
 def get_files(files: Set[Path]) -> Dict[str, List[Path]]:
@@ -119,17 +126,60 @@ def create_constraints(path_constraints: Path) -> None:
             f"CREATE INDEX IF NOT EXISTS {index.name}_map_idx ON {index.name}({MAP_INDEX_KEY}) "
             f"INCLUDE ({', '.join(columns)}) WHERE {MAP_INDEX_CONDITION};\n\n"
         )
+    for table in GeomIndices:
+        # GiST index on the point built from the coordinates for the tile
+        # functions (db/tiles.sql): they filter with "&&" on exactly this
+        # expression. The tile queries repeat the partial condition, otherwise
+        # the planner cannot use the partial index.
+        s += (
+            f"CREATE INDEX IF NOT EXISTS {table.name}_geom_idx ON {table.name} "
+            f"USING GIST ({GEOM_INDEX_EXPRESSION}) WHERE {MAP_INDEX_CONDITION};\n\n"
+        )
 
     path_constraints.write_text(s)
 
 
-def write_schema(path_schema: Path, path_udf: Path) -> None:
+def create_tiles_role() -> None:
+    """Create the read-only role Martin connects with (idempotent).
+
+    The role only gets USAGE on the tiles schema and EXECUTE on the tile
+    functions (db/tiles.sql), it cannot read the unit tables. Without
+    CREATEROLE - e.g. the managed role of a CloudNativePG cluster - an
+    administrator has to create the role; the import continues without it.
+    """
+    password = os.environ.get("TILES_DB_PASSWORD", TILES_DB_PASSWORD_DEFAULT)
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as curr:
+            curr.execute("SELECT 1 FROM pg_roles WHERE rolname = %s", (TILES_DB_USER,))
+            exists = curr.fetchone() is not None
+            # the password is set on every run: TILES_DB_PASSWORD is the single
+            # source of truth for the connection of the tile server. The role
+            # name is a constant, only the password is a parameter.
+            statement = "ALTER ROLE" if exists else "CREATE ROLE"
+            curr.execute(f"{statement} {TILES_DB_USER} WITH LOGIN PASSWORD %s", (password,))
+        conn.commit()
+        logger.info(f"role {TILES_DB_USER} for Martin is ready")
+    except psycopg2.errors.InsufficientPrivilege:
+        conn.rollback()
+        logger.warning(
+            f"cannot create role {TILES_DB_USER} (no CREATEROLE): create it manually, "
+            f"otherwise Martin cannot read the tiles schema"
+        )
+    finally:
+        conn.close()
+
+
+def write_schema(path_schema: Path, path_udf: Path, path_tiles: Path) -> None:
+    """Create the tables, the UDFs and the tile functions. The read-only role
+    for Martin is created first: db/tiles.sql grants it access."""
+    create_tiles_role()
     conn = get_db_connection()
     with conn.cursor() as curr:
         # the tables are created first: the SQL-language UDF katalog()
         # references the katalogwerte table, which must exist when the
         # function is created
-        schema = path_schema.read_text() + "\n" + path_udf.read_text()
+        schema = path_schema.read_text() + "\n" + path_udf.read_text() + "\n" + path_tiles.read_text()
         curr.execute(schema)
         conn.commit()
 
@@ -181,6 +231,7 @@ def delete_tables() -> None:
 
 def main():
     path_udf = Path("db/udf.sql")
+    path_tiles = Path("db/tiles.sql")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--concurrency", type=int, default=4, help="Number of parallel import processes (default: 4)")
     parser.add_argument(
@@ -201,7 +252,7 @@ def main():
     create_constraints(path_constraints)
 
     if args.schema:
-        write_schema(path_schema, path_udf)
+        write_schema(path_schema, path_udf, path_tiles)
         write_constraints(path_constraints)
         enable_autovacuum()
         sys.exit(0)
@@ -210,7 +261,7 @@ def main():
     all_file_paths = set(base_path.glob("*.xml"))
     entities_files = get_files(all_file_paths)
 
-    write_schema(path_schema, path_udf)
+    write_schema(path_schema, path_udf, path_tiles)
 
     # forkserver on every Python version: with "fork" (the Linux default up
     # to Python 3.13) a child can inherit locks held by threads of the parent

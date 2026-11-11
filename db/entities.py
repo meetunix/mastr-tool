@@ -1254,6 +1254,33 @@ MAP_INDEX_CONDITION = "Breitengrad BETWEEN -90 AND 90 AND Laengengrad BETWEEN -1
 MAP_INDEX_COLUMNS = ("EinheitMastrNummer", "Breitengrad", "Laengengrad", "EinheitBetriebsstatus")
 
 
+# GiST index on the point built from the coordinates for the tile server
+# (db/tiles.sql). No geometry column is stored: the index is the only
+# additional space (about 50-70 bytes per unit with coordinates) and the
+# import stays unchanged. The tile functions filter with "&&" on exactly this
+# expression, so a tile request is an index scan instead of a sequential scan
+# over the whole table.
+GEOM_INDEX_EXPRESSION = "ST_SetSRID(ST_MakePoint(Laengengrad::float8, Breitengrad::float8), 4326)"
+
+
+class GeomIndices(Enum):
+    """Unit tables with coordinates -> GiST index on GEOM_INDEX_EXPRESSION for
+    the tile functions in db/tiles.sql."""
+
+    EinheitenWasser = EinheitWasser
+    EinheitenWind = EinheitWind
+    EinheitenSolar = EinheitSolar
+    EinheitenBiomasse = EinheitBiomasse
+    EinheitenGeothermieGrubengasDruckentspannung = EinheitGeothermieGrubengasDruckentspannung
+    EinheitenStromSpeicher = EinheitStromSpeicher
+    EinheitenKernkraft = EinheitKernkraft
+    EinheitenVerbrennung = EinheitVerbrennung
+    EinheitenGasErzeuger = EinheitGasErzeuger
+    EinheitenGasSpeicher = EinheitGasSpeicher
+    EinheitenGasverbraucher = EinheitGasverbraucher
+    EinheitenStromVerbraucher = EinheitStromVerbraucher
+
+
 class MapIndices(Enum):
     """Unit tables on the maps page -> further columns of the map index (name,
     name of the wind or solar park, net power)."""
