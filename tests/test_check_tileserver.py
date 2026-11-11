@@ -3,13 +3,16 @@
 The decoder is the only non-trivial part of the script. It is checked against
 tiles built by hand, so a broken decoder cannot silently report empty tiles.
 The connection pool is checked against a local server that counts the TCP
-connections it accepts.
+connections it accepts, once over HTTP/1.1 and once over HTTP/2.
 """
 
 import json
+import shutil
+import ssl
 import struct
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -174,6 +177,18 @@ class CountingServer(ThreadingHTTPServer):
         return request, address
 
 
+class TlsCountingServer(CountingServer):
+    """HTTP/1.1 server behind TLS that offers only http/1.1 in ALPN."""
+
+    def __init__(self, *args, context, **kwargs):
+        self.context = context
+        super().__init__(*args, **kwargs)
+
+    def get_request(self):
+        request, address = super().get_request()
+        return self.context.wrap_socket(request, server_side=True), address
+
+
 class TileHandler(BaseHTTPRequestHandler):
     """Answers like Martin: health, catalog and empty tiles."""
 
@@ -247,3 +262,90 @@ def test_benchmark_holds_the_configured_connections(tile_server, monkeypatch):
     )
     assert main() == 0
     assert 1 <= server.connections <= 5
+
+
+# --- HTTP/2 -----------------------------------------------------------------
+
+
+def martin_handler(path: str) -> tuple[int, str, bytes]:
+    """Answers like Martin: health, catalog and empty tiles."""
+    if path == "/health":
+        return 200, "text/plain", b"OK"
+    if path == "/catalog":
+        body = json.dumps({"tiles": {f"tiles.{name}": {} for name in expected_layers()}}).encode()
+        return 200, "application/json", body
+    return 204, "application/x-protobuf", b""
+
+
+@pytest.fixture(scope="session")
+def tls_certificate(tmp_path_factory):
+    """A self-signed certificate for 127.0.0.1; ALPN needs TLS."""
+    pytest.importorskip("h2")
+    if shutil.which("openssl") is None:
+        pytest.skip("openssl is needed to generate a test certificate")
+    from h2_server import self_signed_certificate
+
+    return self_signed_certificate(tmp_path_factory.mktemp("tls"))
+
+
+@pytest.fixture
+def h2_server(tls_certificate):
+    from h2_server import H2Server
+
+    cert, key = tls_certificate
+    with H2Server(cert, key, martin_handler) as server:
+        yield server
+
+
+@pytest.fixture
+def https_server(tls_certificate):
+    """TLS server that only offers http/1.1, so --http2 cannot be negotiated."""
+    cert, key = tls_certificate
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(cert, key)
+    context.set_alpn_protocols(["http/1.1"])
+    server = TlsCountingServer(("127.0.0.1", 0), TileHandler, context=context)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server, f"https://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_http2_multiplexes_concurrent_requests(h2_server):
+    """Twenty requests on a pool of five must share one h2 connection."""
+    with SessionPool(5, http2=True, verify=False) as pool, ThreadPoolExecutor(max_workers=5) as executor:
+        responses = list(
+            executor.map(lambda _: pool.request("GET", f"{h2_server.base_url}/health", timeout=5), range(20))
+        )
+    assert {response.http_version for response in responses} == {"HTTP/2"}
+    assert h2_server.connections == 1
+    assert h2_server.streams == 20
+
+
+def test_http2_flag_reports_the_protocol(h2_server, monkeypatch, capsys):
+    """--http2 must negotiate h2 and say so in the health line."""
+    monkeypatch.setattr(sys, "argv", ["check_tileserver.py", "--url", h2_server.base_url, "--http2", "--insecure"])
+    assert main() == 0
+    assert "HTTP/2" in capsys.readouterr().out
+
+
+def test_http2_without_tls_warns_and_falls_back(tile_server, monkeypatch, capsys):
+    """ALPN needs TLS, so --http2 on an http:// URL must warn, not fail."""
+    _, base = tile_server
+    monkeypatch.setattr(sys, "argv", ["check_tileserver.py", "--url", base, "--http2"])
+    assert main() == 0
+    out = capsys.readouterr().out
+    assert "ignored" in out
+    assert "HTTP/1.1" in out
+
+
+def test_http2_requested_but_not_negotiated_fails(https_server, monkeypatch, capsys):
+    """A server that only offers http/1.1 must not pass a --http2 run."""
+    _, base = https_server
+    monkeypatch.setattr(sys, "argv", ["check_tileserver.py", "--url", base, "--http2", "--insecure"])
+    assert main() == 1
+    assert "negotiated HTTP/1.1" in capsys.readouterr().out

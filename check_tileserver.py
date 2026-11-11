@@ -3,12 +3,17 @@
 
 Talks to a running server over HTTP and checks what a map client would see:
 health, catalog, TileJSON and one decoded tile per layer. Needs nothing but
-`requests` and a running server.
+`httpx` and a running server.
 
     python check_tileserver.py
     python check_tileserver.py --url http://localhost:8082 --zoom 12
     python check_tileserver.py --layer wind --lon 8.5 --lat 50.1 --attributes
     python check_tileserver.py --purge
+
+HTTP/2 is negotiated with ALPN, so it needs an https:// URL. Pass --http2 to
+ask for it; the health line reports the protocol that was actually used.
+
+    python check_tileserver.py --url https://tiles.example.org --http2
 
     python check_tileserver.py --benchmark
     python check_tileserver.py --benchmark --requests 500 --min-zoom 8 --seed 42
@@ -24,7 +29,9 @@ by cache hits; use --purge-first to start from a cold cache.
 All requests run on --concurrency workers (default 5) that share a fixed set of
 keep-alive connections. The script opens that many connections once instead of
 one per request, so the timings do not include a TCP and TLS handshake per tile
-and the server is not hit by a burst of short-lived connections.
+and the server is not hit by a burst of short-lived connections. Over HTTP/2
+the workers share a single connection and --concurrency is the number of
+concurrent streams instead.
 """
 
 import argparse
@@ -38,9 +45,8 @@ import textwrap
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from queue import Queue
 
-import requests
+import httpx
 
 # keep in sync with db/tiles.sql; read from there when the file is available
 FALLBACK_LAYERS = [
@@ -60,6 +66,9 @@ FALLBACK_LAYERS = [
 
 MVT_CONTENT_TYPES = {"application/x-protobuf", "application/vnd.mapbox-vector-tile"}
 
+# httpx.InvalidURL is not an HTTPError, but a bad --url must not crash the run
+REQUEST_ERRORS = (httpx.HTTPError, httpx.InvalidURL)
+
 # rough bounding box of Germany, the benchmark picks random points inside it
 GERMANY_LON = (5.87, 15.04)
 GERMANY_LAT = (47.27, 55.06)
@@ -69,41 +78,36 @@ W_LAYER, W_STATUS, W_SIZE, W_FEATURES, W_ATTRS = 22, 6, 9, 8, 10
 
 
 class SessionPool:
-    """A fixed set of requests.Session objects, each holding one keep-alive
-    connection.
+    """One httpx.Client holding a fixed number of keep-alive connections.
 
-    A session is not thread safe, so a worker borrows one for the duration of a
-    request. The pool size is the concurrency limit: the script opens that many
-    connections once and reuses them, instead of a new connection (and a new
-    TLS handshake) for every tile.
+    HTTP/1.1: the pool size is the number of TCP connections. The script opens
+    that many once and reuses them, instead of a new connection (and a new TLS
+    handshake) for every tile.
+
+    HTTP/2: every request is a stream on a single connection, so the pool is
+    capped at one connection and the pool size only limits how many requests
+    run at the same time. httpx.Client is thread safe, so the workers share it
+    directly.
     """
 
-    def __init__(self, size: int):
-        self._sessions: Queue[requests.Session] = Queue()
-        for _ in range(size):
-            session = requests.Session()
-            # one connection per session, so the pool size is the limit
-            adapter = requests.adapters.HTTPAdapter(pool_connections=1, pool_maxsize=1)
-            session.mount("http://", adapter)
-            session.mount("https://", adapter)
-            self._sessions.put(session)
+    def __init__(self, size: int, http2: bool = False, verify: bool = True):
+        connections = 1 if http2 else size
+        self._client = httpx.Client(
+            http2=http2,
+            verify=verify,
+            limits=httpx.Limits(max_connections=connections, max_keepalive_connections=connections),
+        )
 
     def __enter__(self) -> "SessionPool":
         return self
 
     def __exit__(self, *exc_info) -> None:
-        while not self._sessions.empty():
-            self._sessions.get_nowait().close()
+        self._client.close()
 
-    def request(self, method: str, url: str, **kwargs) -> requests.Response:
-        """Send one request on a borrowed session. The response body is read
-        before the session goes back to the pool, so the connection is free
-        again when the caller gets the response."""
-        session = self._sessions.get()
-        try:
-            return session.request(method, url, **kwargs)
-        finally:
-            self._sessions.put(session)
+    def request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """Send one request. The response body is read before the call
+        returns, so the connection is free again for the next request."""
+        return self._client.request(method, url, **kwargs)
 
 
 # --- Mapbox Vector Tile decoding (protobuf, no external dependency) ---------
@@ -252,7 +256,7 @@ def purge_sources(pool: SessionPool, base: str, sources: list[str], timeout: flo
     def purge(source: str) -> int | None:
         try:
             return pool.request("DELETE", f"{base}/cache/{source}", timeout=timeout).status_code
-        except requests.RequestException:
+        except REQUEST_ERRORS:
             return None
 
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
@@ -266,7 +270,7 @@ def benchmark_tile(pool: SessionPool, base: str, sample: tuple[str, int, int, in
     started = time.perf_counter()
     try:
         response = pool.request("GET", f"{base}/{source}/{zoom}/{x}/{y}", timeout=timeout)
-    except requests.RequestException as exc:
+    except REQUEST_ERRORS as exc:
         return None, f"{source} z{zoom} {x}/{y}: {exc}"
     elapsed = (time.perf_counter() - started) * 1000
 
@@ -289,7 +293,9 @@ def benchmark_tile(pool: SessionPool, base: str, sample: tuple[str, int, int, in
     }, None
 
 
-def run_benchmark(args, base: str, layers: list[str], failures: list[str], pool: SessionPool) -> int:
+def run_benchmark(
+    args, base: str, layers: list[str], failures: list[str], pool: SessionPool, protocol: str
+) -> int:
     """Request random tiles of random layers at random zooms across Germany."""
     seed = args.seed if args.seed is not None else random.randrange(1_000_000)
     rng = random.Random(seed)
@@ -300,7 +306,7 @@ def run_benchmark(args, base: str, layers: list[str], failures: list[str], pool:
 
     print(
         f"\nbenchmark: up to {args.requests} unique tiles, zoom {args.min_zoom}-{args.max_zoom}, "
-        f"{len(layers)} layers, seed {seed}, {args.concurrency} connections"
+        f"{len(layers)} layers, seed {seed}, {args.concurrency} workers over {protocol}"
     )
 
     samples: list[tuple[str, int, int, int]] = []
@@ -380,7 +386,7 @@ def check_layer(pool: SessionPool, base: str, name: str, zoom: int, x: int, y: i
     started = time.perf_counter()
     try:
         response = pool.request("GET", f"{base}/{source}/{zoom}/{x}/{y}", timeout=timeout)
-    except requests.RequestException as exc:
+    except REQUEST_ERRORS as exc:
         return table_row(source, "-", "-", "-", "-"), [f"{source}: {exc}"], None, None
     elapsed = (time.perf_counter() - started) * 1000
 
@@ -427,7 +433,17 @@ def main() -> int:
         "--concurrency",
         type=int,
         default=5,
-        help="parallel requests and keep-alive connections (default: 5)",
+        help="parallel requests; HTTP/1.1 connections or HTTP/2 streams (default: 5)",
+    )
+    parser.add_argument(
+        "--http2",
+        action="store_true",
+        help="negotiate HTTP/2 with ALPN; needs an https:// URL",
+    )
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="do not verify the TLS certificate (self-signed test servers)",
     )
     parser.add_argument("--attributes", action="store_true", help="list the feature attributes of every layer")
     parser.add_argument("--purge", action="store_true", help="also test DELETE /cache/{source}")
@@ -455,23 +471,28 @@ def main() -> int:
     print(f"Martin tile server: {base}")
     if not args.benchmark:
         print(f"tile: z{args.zoom} x{x} y{y} (lon {args.lon}, lat {args.lat})")
+    if args.http2 and base.startswith("http://"):
+        print(label("http2", "ignored: ALPN needs TLS, use an https:// URL"))
     print()
 
-    with SessionPool(args.concurrency) as pool:
+    with SessionPool(args.concurrency, http2=args.http2, verify=not args.insecure) as pool:
         # --- health -----------------------------------------------------
         try:
             response = pool.request("GET", f"{base}/health", timeout=args.timeout)
-        except requests.RequestException as exc:
+        except REQUEST_ERRORS as exc:
             print(label("health", f"FAILED: cannot reach {base}: {exc}"))
             return 1
         if response.status_code != 200:
             failures.append(f"health returned {response.status_code}")
-        print(label("health", f"{response.status_code} {response.text.strip()[:40]}"))
+        protocol = response.http_version
+        print(label("health", f"{response.status_code} {response.text.strip()[:40]} ({protocol})"))
+        if args.http2 and base.startswith("https://") and protocol != "HTTP/2":
+            failures.append(f"HTTP/2 was requested but the server negotiated {protocol}")
 
         # --- catalog ----------------------------------------------------
         try:
             catalog = pool.request("GET", f"{base}/catalog", timeout=args.timeout).json()
-        except (requests.RequestException, ValueError) as exc:
+        except REQUEST_ERRORS + (ValueError,) as exc:
             print(label("catalog", f"FAILED: {exc}"))
             return 1
         published = sorted(catalog.get("tiles", {}))
@@ -486,7 +507,7 @@ def main() -> int:
             print(label("layers", "none found - is db/tiles.sql present?"))
             return 1
         if args.benchmark:
-            return run_benchmark(args, base, layers, failures, pool)
+            return run_benchmark(args, base, layers, failures, pool, protocol)
 
         # --- tiles ------------------------------------------------------
         print()
@@ -534,7 +555,7 @@ def main() -> int:
             print(label("content-type", content_type or "-"))
             if first in timings:
                 print(label("cache", f"{first}: {timings[first]:.1f} ms, then {again:.1f} ms"))
-        except requests.RequestException as exc:
+        except REQUEST_ERRORS as exc:
             failures.append(f"header check failed: {exc}")
 
         # --- purge ------------------------------------------------------
@@ -546,7 +567,7 @@ def main() -> int:
                 try:
                     response = pool.request("DELETE", f"{base}/cache/{source}", timeout=args.timeout)
                     return response.status_code, response.text.strip()[:60], None
-                except requests.RequestException as exc:
+                except REQUEST_ERRORS as exc:
                     return None, None, str(exc)
 
             with ThreadPoolExecutor(max_workers=args.concurrency) as executor:
