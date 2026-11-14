@@ -143,6 +143,7 @@ BEGIN
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.einspeisungsart AS einspeisungsart,
                    e.rotorblattenteisungssystem AS rotorblattenteisung,
                    e.nachtkennzeichnung AS nachtkennzeichnung,
                    e.auflageabschaltungleistungsbegrenzung AS auflage_leistungsbegrenzung,

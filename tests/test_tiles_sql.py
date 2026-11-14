@@ -191,6 +191,7 @@ LAYER_FIELDS = {
         "typ",
         "offshore",
         "buergerenergie",
+        "einspeisungsart",
         "rotorblattenteisung",
         "nachtkennzeichnung",
         "auflage_leistungsbegrenzung",
