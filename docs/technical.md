@@ -105,6 +105,19 @@ Ohne Bündelung wäre eine z0-Kachel von `wind` 4,7 MB groß (43.000 Einheiten, 
 Filter pro Anfrage (z. B. `…/{z}/{x}/{y}?min_kw=1000`) sind mit Martin über einen vierten Parameter `query json`
 möglich; die Layer hier verzichten darauf, damit die Kacheln klein bleiben.
 
+## TileJSON
+
+Martin liest den `COMMENT ON FUNCTION` als TileJSON. Jede Funktion liefert deshalb neben `description` auch
+`minzoom`/`maxzoom` (0/14), `bounds` (Deutschland einschließlich der Offshore-Gebiete), `center`, `attribution`
+(MaStR-Datenlizenz dl-de/by-2-0), `format` (`pbf`), `scheme` (`xyz`) und `vector_layers` mit den Feldnamen und
+Typen (`String`, `Number`, `Boolean`). `vector_layers` ist die einzige Stelle, an der ein Client das Attributschema
+findet; `tests/test_tiles_sql.py` prüft, dass die Felder mit den `AS`-Aliassen in `db/tiles.sql` übereinstimmen.
+
+Die `tiles`-URL in der TileJSON baut Martin aus der Anfrage. Hinter einem TLS-Reverse-Proxy muss der Proxy deshalb
+`X-Forwarded-Proto`, `X-Forwarded-Host` und `X-Rewrite-URL` setzen, sonst steht in der TileJSON `http://…` statt
+`https://…` und Browser blockieren die Kacheln als Mixed Content. `check_tileserver.py` prüft, dass Schema und Host
+der `tiles`-URL zur Basis-URL passen.
+
 ## Betrieb
 
 In `docker-compose.yaml` läuft Martin auf `127.0.0.1:8082` (Container-Port 7800); die Konfiguration liegt in

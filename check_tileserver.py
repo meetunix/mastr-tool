@@ -48,6 +48,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from urllib.parse import urljoin, urlsplit
 
 import httpx
 
@@ -443,6 +444,90 @@ def check_layer(pool: SessionPool, base: str, name: str, zoom: int, x: int, y: i
     return row, problems, elapsed, names
 
 
+def check_tilejson(pool: SessionPool, base: str, layers: list[str], timeout: float) -> tuple[str, list[str]]:
+    """Check the TileJSON metadata a client reads before requesting tiles.
+
+    The tiles URL must use the same scheme and host as the base URL: behind a
+    TLS reverse proxy Martin only generates https:// URLs when the proxy
+    forwards X-Forwarded-Proto (and X-Forwarded-Host/X-Rewrite-URL).
+    """
+    failures: list[str] = []
+    base_parts = urlsplit(base)
+    zoom_range: tuple[int, int] | None = None
+    bounds: list[float] | None = None
+    vector_layers = 0
+    for name in layers:
+        source = f"tiles.{name}"
+        try:
+            response = pool.request("GET", f"{base}/{source}", timeout=timeout)
+        except REQUEST_ERRORS as exc:
+            failures.append(f"{source}: TileJSON request failed: {exc}")
+            continue
+        if response.status_code != 200:
+            failures.append(f"{source}: TileJSON returned HTTP {response.status_code}")
+            continue
+        try:
+            data = response.json()
+        except ValueError as exc:
+            failures.append(f"{source}: TileJSON is not JSON: {exc}")
+            continue
+        if not str(data.get("tilejson", "")).startswith("3."):
+            failures.append(f"{source}: missing or unsupported tilejson version")
+        tiles = data.get("tiles") or []
+        if not tiles:
+            failures.append(f"{source}: TileJSON has no tiles URL")
+        for tile_url in tiles:
+            parts = urlsplit(urljoin(base + "/", tile_url))
+            if (parts.scheme, parts.netloc) != (base_parts.scheme, base_parts.netloc):
+                failures.append(f"{source}: TileJSON tile URL {tile_url!r} does not match {base}")
+        minzoom, maxzoom = data.get("minzoom"), data.get("maxzoom")
+        if not (isinstance(minzoom, int) and isinstance(maxzoom, int) and 0 <= minzoom <= maxzoom <= 22):
+            failures.append(f"{source}: TileJSON has no valid minzoom/maxzoom")
+        else:
+            zoom_range = (minzoom, maxzoom)
+        layer_bounds = data.get("bounds")
+        if not (
+            isinstance(layer_bounds, list)
+            and len(layer_bounds) == 4
+            and all(isinstance(value, (int, float)) for value in layer_bounds)
+            and layer_bounds[0] < layer_bounds[2]
+            and layer_bounds[1] < layer_bounds[3]
+        ):
+            failures.append(f"{source}: TileJSON has no valid bounds")
+        else:
+            bounds = layer_bounds
+        center = data.get("center")
+        if not (
+            isinstance(center, list) and len(center) == 3 and all(isinstance(value, (int, float)) for value in center)
+        ):
+            failures.append(f"{source}: TileJSON has no valid center")
+        elif bounds and not (bounds[0] <= center[0] <= bounds[2] and bounds[1] <= center[1] <= bounds[3]):
+            failures.append(f"{source}: TileJSON center is outside bounds")
+        if not data.get("attribution"):
+            failures.append(f"{source}: TileJSON has no attribution")
+        if data.get("format") != "pbf":
+            failures.append(f"{source}: TileJSON format is not pbf")
+        if data.get("scheme") != "xyz":
+            failures.append(f"{source}: TileJSON scheme is not xyz")
+        vl = data.get("vector_layers") or []
+        if not vl:
+            failures.append(f"{source}: TileJSON has no vector_layers")
+        else:
+            vector_layers += len(vl)
+            if vl[0].get("id") != name:
+                failures.append(f"{source}: vector_layers id {vl[0].get('id')!r} != {name!r}")
+            if not vl[0].get("fields"):
+                failures.append(f"{source}: vector_layers has no fields")
+    summary = f"{len(layers)} sources"
+    if zoom_range:
+        summary += f", zoom {zoom_range[0]}-{zoom_range[1]}"
+    if bounds:
+        summary += f", bounds {bounds}"
+    if vector_layers:
+        summary += f", {vector_layers} vector_layers"
+    return summary, failures
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
@@ -530,6 +615,12 @@ def main() -> int:
         if not layers:
             print(label("layers", "none found - is db/tiles.sql present?"))
             return 1
+
+        # --- tilejson ---------------------------------------------------
+        tilejson_summary, tilejson_failures = check_tilejson(pool, base, layers, args.timeout)
+        failures.extend(tilejson_failures)
+        print(label("tilejson", tilejson_summary))
+
         if args.benchmark:
             return run_benchmark(args, base, layers, failures, pool, protocol)
 

@@ -200,6 +200,23 @@ class TileHandler(BaseHTTPRequestHandler):
         elif self.path == "/catalog":
             body = json.dumps({"tiles": {f"tiles.{name}": {} for name in expected_layers()}}).encode()
             self._send(200, body, "application/json")
+        elif self.path.startswith("/tiles.") and "/" not in self.path[len("/tiles.") :]:
+            name = self.path[len("/tiles.") :]
+            body = json.dumps(
+                {
+                    "tilejson": "3.0.0",
+                    "tiles": [f"/tiles.{name}/{{z}}/{{x}}/{{y}}"],
+                    "minzoom": 0,
+                    "maxzoom": 14,
+                    "bounds": [3.0, 47.0, 16.0, 56.0],
+                    "center": [10.45, 51.16, 6],
+                    "attribution": "test",
+                    "format": "pbf",
+                    "scheme": "xyz",
+                    "vector_layers": [{"id": name, "fields": {"mastr_nr": "String"}}],
+                }
+            ).encode()
+            self._send(200, body, "application/json")
         else:
             self._send(204, b"", "application/x-protobuf")
 
@@ -268,11 +285,28 @@ def test_benchmark_holds_the_configured_connections(tile_server, monkeypatch):
 
 
 def martin_handler(path: str) -> tuple[int, str, bytes]:
-    """Answers like Martin: health, catalog and empty tiles."""
+    """Answers like Martin: health, catalog, TileJSON and empty tiles."""
     if path == "/health":
         return 200, "text/plain", b"OK"
     if path == "/catalog":
         body = json.dumps({"tiles": {f"tiles.{name}": {} for name in expected_layers()}}).encode()
+        return 200, "application/json", body
+    if path.startswith("/tiles.") and "/" not in path[len("/tiles.") :]:
+        name = path[len("/tiles.") :]
+        body = json.dumps(
+            {
+                "tilejson": "3.0.0",
+                "tiles": [f"/tiles.{name}/{{z}}/{{x}}/{{y}}"],
+                "minzoom": 0,
+                "maxzoom": 14,
+                "bounds": [3.0, 47.0, 16.0, 56.0],
+                "center": [10.45, 51.16, 6],
+                "attribution": "test",
+                "format": "pbf",
+                "scheme": "xyz",
+                "vector_layers": [{"id": name, "fields": {"mastr_nr": "String"}}],
+            }
+        ).encode()
         return 200, "application/json", body
     return 204, "application/x-protobuf", b""
 

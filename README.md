@@ -144,6 +144,9 @@ map.addSource("mastr-wind", {
 map.addLayer({ id: "mastr-wind", type: "circle", source: "mastr-wind", "source-layer": "wind" });
 ```
 
+Die TileJSON (`/tiles.wind`) enthält Zoombereich, Bounds, Attribution und das Attributschema (`vector_layers`); die
+Attribute selbst sind bereits aufgelöste Katalogwerte (z. B. `status: "In Betrieb"`), keine IDs.
+
 Die Hintergrundkarte kommt vom Client (OSM, basemap.de, …), MVT enthält nur die Punkte. Die Daten stammen aus dem
 zuletzt importierten Dump; der Cache kann sie bis zu 12 h halten.
 

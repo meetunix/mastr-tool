@@ -345,6 +345,73 @@ class TestCatalogValues:
         assert "k_solaranlagenkategorie.wert AS solaranlagenkategorie" in body
 
 
+class TestTileJSON:
+    """The COMMENT ON FUNCTION is the TileJSON a client reads."""
+
+    def comments(self) -> dict[str, dict]:
+        sql = TILES_SQL.read_text()
+        result = {}
+        for name in tile_functions():
+            match = re.search(
+                rf"COMMENT ON FUNCTION tiles\.{name}\(integer, integer, integer\) IS\s*'(.*?)';",
+                sql,
+                re.S,
+            )
+            assert match, name
+            result[name] = json.loads(match.group(1))
+        return result
+
+    def test_common_fields(self):
+        for name, comment in self.comments().items():
+            assert comment["minzoom"] == 0, name
+            assert comment["maxzoom"] == 14, name
+            west, south, east, north = comment["bounds"]
+            assert west < east and south < north, name
+            lon, lat, zoom = comment["center"]
+            assert west <= lon <= east and south <= lat <= north, name
+            assert 0 <= zoom <= 14, name
+            assert comment["attribution"], name
+            assert comment["format"] == "pbf", name
+            assert comment["scheme"] == "xyz", name
+
+    def test_vector_layers_match_the_mvt_layer(self):
+        for name, comment in self.comments().items():
+            layers = comment["vector_layers"]
+            assert len(layers) == 1, name
+            assert layers[0]["id"] == name, name
+            assert layers[0]["minzoom"] == 0, name
+            assert layers[0]["maxzoom"] == 14, name
+            assert layers[0]["fields"], name
+            assert set(layers[0]["fields"].values()) <= {"String", "Number", "Boolean"}, name
+
+    def test_vector_layer_fields_match_the_sql(self):
+        """A field added to the SQL must also appear in the TileJSON, and a
+        field removed from the SQL must disappear from it."""
+        for name, body in tile_functions().items():
+            fields = set(self.comments()[name]["vector_layers"][0]["fields"])
+            expected = set()
+            bundled = body.split("ELSE")[0]
+            if "sum(c.anzahl)::bigint AS anzahl" in bundled:
+                expected.add("anzahl")
+            if "sum(c.kw) AS kw" in bundled:
+                expected.add("kw")
+            detail = body.split("ELSE")[-1]
+            start = detail.index("f AS (")
+            depth = 0
+            for j in range(start + len("f AS ("), len(detail)):
+                if detail[j] == "(":
+                    depth += 1
+                elif detail[j] == ")":
+                    if depth == 0:
+                        block = detail[start + len("f AS (") : j]
+                        break
+                    depth -= 1
+            for alias in re.findall(r"\s+AS\s+(\w+),?\s*$", block, re.M):
+                if alias != "geom":
+                    expected.add(alias)
+            assert fields == expected, f"{name}: {fields ^ expected}"
+
+
 class TestBundling:
     def test_every_layer_is_bundled(self):
         """A z0 tile of wind carries 43k units and grows to 4.7 MB; the

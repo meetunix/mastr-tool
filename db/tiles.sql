@@ -11,8 +11,9 @@
 -- functions (see the grants at the end of this file). It cannot read the unit
 -- tables, and martin/config.yaml publishes no table sources anyway.
 --
--- Martin reads the COMMENT ON FUNCTION as TileJSON, so the comment is a JSON
--- object with at least a "description".
+-- Martin reads the COMMENT ON FUNCTION as TileJSON: description, zoom range,
+-- bounds, center, attribution, format, scheme and vector_layers. The fields in
+-- vector_layers must match the AS aliases below (tests/test_tiles_sql.py).
 --
 -- Every function filters with "&&" on the same expression that the GiST index
 -- uses (GeomIndices in db/entities.py), so a tile request is an index scan.
@@ -184,7 +185,68 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.wind(integer, integer, integer) IS
-    '{"description": "Windenergieanlagen aus dem MaStR"}';
+    '{
+      "description": "Windenergieanlagen aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "wind",
+          "description": "Windenergieanlagen aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "park": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "brutto_kw": "Number",
+            "betreiber": "String",
+            "fernsteuerbar_nb": "Boolean",
+            "fernsteuerbar_dv": "Boolean",
+            "hochspannung": "Boolean",
+            "stillgelegt_am": "String",
+            "nabenhoehe": "Number",
+            "rotordurchmesser": "Number",
+            "hersteller": "String",
+            "typ": "String",
+            "offshore": "String",
+            "buergerenergie": "Boolean",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String",
+            "einspeisungsart": "String",
+            "rotorblattenteisung": "Boolean",
+            "nachtkennzeichnung": "Boolean",
+            "auflage_leistungsbegrenzung": "Boolean",
+            "auflage_schall_nachts": "Boolean",
+            "auflage_schall_tagsueber": "Boolean",
+            "auflage_schattenwurf": "Boolean",
+            "auflage_tierschutz": "Boolean",
+            "auflage_eiswurf": "Boolean",
+            "auflage_sonstige": "Boolean",
+            "wassertiefe": "Number"
+          }
+        }
+      ]
+    }';
 
 -- Solaranlagen: gebündelt unterhalb von Zoom 10
 CREATE OR REPLACE FUNCTION tiles.solar(z integer, x integer, y integer)
@@ -306,7 +368,62 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.solar(integer, integer, integer) IS
-    '{"description": "Solaranlagen aus dem MaStR, unterhalb von Zoom 10 je Rasterzelle gebündelt (anzahl, kw)"}';
+    '{
+      "description": "Solaranlagen aus dem MaStR, unterhalb von Zoom 10 je Rasterzelle gebündelt (anzahl, kw)",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "solar",
+          "description": "Solaranlagen aus dem MaStR, unterhalb von Zoom 10 je Rasterzelle gebündelt (anzahl, kw)",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "park": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "brutto_kw": "Number",
+            "betreiber": "String",
+            "fernsteuerbar_nb": "Boolean",
+            "fernsteuerbar_dv": "Boolean",
+            "hochspannung": "Boolean",
+            "stillgelegt_am": "String",
+            "art": "String",
+            "module": "Number",
+            "ausrichtung": "String",
+            "neigung": "String",
+            "flaeche_ha": "Number",
+            "speicher_am_ort": "Boolean",
+            "buergerenergie": "Boolean",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String",
+            "einspeisungsart": "String",
+            "leistungsbegrenzung": "String",
+            "nutzungsbereich": "String",
+            "solaranlagenkategorie": "String"
+          }
+        }
+      ]
+    }';
 
 -- Biomasseanlagen
 CREATE OR REPLACE FUNCTION tiles.biomasse(z integer, x integer, y integer)
@@ -419,7 +536,56 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.biomasse(integer, integer, integer) IS
-    '{"description": "Biomasseanlagen aus dem MaStR"}';
+    '{
+      "description": "Biomasseanlagen aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "biomasse",
+          "description": "Biomasseanlagen aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "brutto_kw": "Number",
+            "betreiber": "String",
+            "fernsteuerbar_nb": "Boolean",
+            "fernsteuerbar_dv": "Boolean",
+            "hochspannung": "Boolean",
+            "stillgelegt_am": "String",
+            "brennstoff": "String",
+            "biomasseart": "String",
+            "technologie": "String",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String",
+            "einspeisungsart": "String",
+            "netzreserve": "Boolean",
+            "kapazitaetsreserve": "Boolean"
+          }
+        }
+      ]
+    }';
 
 -- Wasserkraftanlagen
 CREATE OR REPLACE FUNCTION tiles.wasser(z integer, x integer, y integer)
@@ -533,7 +699,58 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.wasser(integer, integer, integer) IS
-    '{"description": "Wasserkraftanlagen aus dem MaStR"}';
+    '{
+      "description": "Wasserkraftanlagen aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "wasser",
+          "description": "Wasserkraftanlagen aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "park": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "brutto_kw": "Number",
+            "betreiber": "String",
+            "fernsteuerbar_nb": "Boolean",
+            "fernsteuerbar_dv": "Boolean",
+            "hochspannung": "Boolean",
+            "stillgelegt_am": "String",
+            "art": "String",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String",
+            "einspeisungsart": "String",
+            "netzreserve": "Boolean",
+            "kapazitaetsreserve": "Boolean",
+            "art_des_zuflusses": "String",
+            "minderung_stromerzeugung": "Boolean",
+            "bestandteil_grenzkraftwerk": "Boolean"
+          }
+        }
+      ]
+    }';
 
 -- Geothermie, Grubengas, Druckentspannung
 CREATE OR REPLACE FUNCTION tiles.geothermie(z integer, x integer, y integer)
@@ -642,7 +859,54 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.geothermie(integer, integer, integer) IS
-    '{"description": "Geothermie-, Grubengas- und Druckentspannungsanlagen aus dem MaStR"}';
+    '{
+      "description": "Geothermie-, Grubengas- und Druckentspannungsanlagen aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "geothermie",
+          "description": "Geothermie-, Grubengas- und Druckentspannungsanlagen aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "brutto_kw": "Number",
+            "betreiber": "String",
+            "fernsteuerbar_nb": "Boolean",
+            "fernsteuerbar_dv": "Boolean",
+            "hochspannung": "Boolean",
+            "stillgelegt_am": "String",
+            "technologie": "String",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String",
+            "einspeisungsart": "String",
+            "netzreserve": "Boolean",
+            "kapazitaetsreserve": "Boolean"
+          }
+        }
+      ]
+    }';
 
 -- Stromspeicher: gebündelt unterhalb von Zoom 10
 CREATE OR REPLACE FUNCTION tiles.stromspeicher(z integer, x integer, y integer)
@@ -764,7 +1028,62 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.stromspeicher(integer, integer, integer) IS
-    '{"description": "Stromspeicher aus dem MaStR, unterhalb von Zoom 10 je Rasterzelle gebündelt (anzahl, kw)"}';
+    '{
+      "description": "Stromspeicher aus dem MaStR, unterhalb von Zoom 10 je Rasterzelle gebündelt (anzahl, kw)",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "stromspeicher",
+          "description": "Stromspeicher aus dem MaStR, unterhalb von Zoom 10 je Rasterzelle gebündelt (anzahl, kw)",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "brutto_kw": "Number",
+            "betreiber": "String",
+            "fernsteuerbar_nb": "Boolean",
+            "fernsteuerbar_dv": "Boolean",
+            "hochspannung": "Boolean",
+            "stillgelegt_am": "String",
+            "batterietechnologie": "String",
+            "acdc": "String",
+            "einsatzort": "String",
+            "pumpspeicher": "String",
+            "notstrom": "Boolean",
+            "wechselrichter": "Number",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String",
+            "einspeisungsart": "String",
+            "netzreserve": "Boolean",
+            "kapazitaetsreserve": "Boolean",
+            "technologie": "String",
+            "eeg_anlagentyp": "String",
+            "pumpbetrieb_leistungsaufnahme": "Number"
+          }
+        }
+      ]
+    }';
 
 -- Kernkraftwerke
 CREATE OR REPLACE FUNCTION tiles.kernkraft(z integer, x integer, y integer)
@@ -875,7 +1194,56 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.kernkraft(integer, integer, integer) IS
-    '{"description": "Kernkraftwerke aus dem MaStR"}';
+    '{
+      "description": "Kernkraftwerke aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "kernkraft",
+          "description": "Kernkraftwerke aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "park": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "brutto_kw": "Number",
+            "betreiber": "String",
+            "fernsteuerbar_nb": "Boolean",
+            "fernsteuerbar_dv": "Boolean",
+            "hochspannung": "Boolean",
+            "stillgelegt_am": "String",
+            "block": "String",
+            "technologie": "String",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String",
+            "einspeisungsart": "String",
+            "netzreserve": "Boolean",
+            "kapazitaetsreserve": "Boolean"
+          }
+        }
+      ]
+    }';
 
 -- Verbrennungsanlagen
 CREATE OR REPLACE FUNCTION tiles.verbrennung(z integer, x integer, y integer)
@@ -996,7 +1364,63 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.verbrennung(integer, integer, integer) IS
-    '{"description": "Verbrennungsanlagen aus dem MaStR"}';
+    '{
+      "description": "Verbrennungsanlagen aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "verbrennung",
+          "description": "Verbrennungsanlagen aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "park": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "brutto_kw": "Number",
+            "betreiber": "String",
+            "fernsteuerbar_nb": "Boolean",
+            "fernsteuerbar_dv": "Boolean",
+            "hochspannung": "Boolean",
+            "stillgelegt_am": "String",
+            "brennstoff": "String",
+            "kombibetrieb": "Boolean",
+            "einsatzort": "String",
+            "notstrom": "Boolean",
+            "block": "String",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String",
+            "einspeisungsart": "String",
+            "netzreserve": "Boolean",
+            "kapazitaetsreserve": "Boolean",
+            "weiterer_hauptbrennstoff": "String",
+            "technologie": "String",
+            "datum_baubeginn": "String",
+            "sicherheitsbereitschaft_ab": "String"
+          }
+        }
+      ]
+    }';
 
 -- Gaserzeuger (die Leistungsspalte heisst hier Erzeugungsleistung)
 CREATE OR REPLACE FUNCTION tiles.gaserzeuger(z integer, x integer, y integer)
@@ -1097,7 +1521,47 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.gaserzeuger(integer, integer, integer) IS
-    '{"description": "Gaserzeuger aus dem MaStR"}';
+    '{
+      "description": "Gaserzeuger aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "gaserzeuger",
+          "description": "Gaserzeuger aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "betreiber": "String",
+            "stillgelegt_am": "String",
+            "technologie": "String",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String"
+          }
+        }
+      ]
+    }';
 
 -- Gasspeicher (Leistung: maximale Einspeicherleistung)
 CREATE OR REPLACE FUNCTION tiles.gasspeicher(z integer, x integer, y integer)
@@ -1201,7 +1665,50 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.gasspeicher(integer, integer, integer) IS
-    '{"description": "Gasspeicher aus dem MaStR"}';
+    '{
+      "description": "Gasspeicher aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "gasspeicher",
+          "description": "Gasspeicher aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "betreiber": "String",
+            "stillgelegt_am": "String",
+            "speicherart": "String",
+            "arbeitsgasvolumen": "Number",
+            "ausspeicherleistung": "Number",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String",
+            "brennwert": "Number"
+          }
+        }
+      ]
+    }';
 
 -- Gasverbraucher (Leistung: maximale Gasbezugsleistung)
 CREATE OR REPLACE FUNCTION tiles.gasverbraucher(z integer, x integer, y integer)
@@ -1301,7 +1808,47 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.gasverbraucher(integer, integer, integer) IS
-    '{"description": "Gasverbraucher aus dem MaStR"}';
+    '{
+      "description": "Gasverbraucher aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "gasverbraucher",
+          "description": "Gasverbraucher aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "kw": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "betreiber": "String",
+            "stillgelegt_am": "String",
+            "dient_der_stromerzeugung": "Boolean",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String"
+          }
+        }
+      ]
+    }';
 
 -- Stromverbraucher (keine Leistungsspalte im MaStR)
 CREATE OR REPLACE FUNCTION tiles.stromverbraucher(z integer, x integer, y integer)
@@ -1399,7 +1946,46 @@ SECURITY DEFINER
 SET search_path = public, pg_temp;
 
 COMMENT ON FUNCTION tiles.stromverbraucher(integer, integer, integer) IS
-    '{"description": "Stromverbrauchseinheiten aus dem MaStR"}';
+    '{
+      "description": "Stromverbrauchseinheiten aus dem MaStR",
+      "minzoom": 0,
+      "maxzoom": 14,
+      "bounds": [
+        3.0,
+        47.0,
+        16.0,
+        56.0
+      ],
+      "center": [
+        10.45,
+        51.16,
+        6
+      ],
+      "attribution": "© Bundesnetzagentur – Marktstammdatenregister (dl-de/by-2-0)",
+      "format": "pbf",
+      "scheme": "xyz",
+      "vector_layers": [
+        {
+          "id": "stromverbraucher",
+          "description": "Stromverbrauchseinheiten aus dem MaStR",
+          "minzoom": 0,
+          "maxzoom": 14,
+          "fields": {
+            "anzahl": "Number",
+            "mastr_nr": "String",
+            "name": "String",
+            "status": "String",
+            "inbetriebnahme": "String",
+            "betreiber": "String",
+            "stillgelegt_am": "String",
+            "anzahl_groesser_50mw": "Number",
+            "gemeinde": "String",
+            "gemeindeschluessel": "String",
+            "aktualisiert_am": "String"
+          }
+        }
+      ]
+    }';
 
 -- The read-only role for Martin is created by import_mastr.py
 -- (create_tiles_role). Without CREATEROLE (e.g. a CloudNativePG managed role)
