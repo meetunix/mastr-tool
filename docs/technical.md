@@ -61,7 +61,7 @@ Je Energieträger zusätzlich:
 
 | Layer              | Felder                                                                                       |
 |--------------------|----------------------------------------------------------------------------------------------|
-| `wind`             | `nabenhoehe`, `rotordurchmesser`, `hersteller`, `typ`, `offshore`, `buergerenergie`, `gemeinde`, `gemeindeschluessel`, `aktualisiert_am`, `rotorblattenteisung`, `nachtkennzeichnung`, `auflage_leistungsbegrenzung`, `auflage_schall_nachts`, `auflage_schall_tagsueber`, `auflage_schattenwurf`, `auflage_tierschutz`, `auflage_eiswurf`, `auflage_sonstige`, `wassertiefe` |
+| `wind`             | `nabenhoehe`, `rotordurchmesser`, `hersteller`, `typ`, `offshore`, `buergerenergie`, `rotorblattenteisung`, `nachtkennzeichnung`, `auflage_leistungsbegrenzung`, `auflage_schall_nachts`, `auflage_schall_tagsueber`, `auflage_schattenwurf`, `auflage_tierschutz`, `auflage_eiswurf`, `auflage_sonstige`, `wassertiefe` |
 | `solar`            | `art`, `module`, `ausrichtung`, `neigung`, `flaeche_ha`, `speicher_am_ort`, `buergerenergie`, `einspeisungsart`, `leistungsbegrenzung`, `nutzungsbereich`, `solaranlagenkategorie` |
 | `biomasse`         | `brennstoff`, `biomasseart`, `technologie`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve` |
 | `wasser`           | `art`, `park`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve`, `art_des_zuflusses`, `minderung_stromerzeugung`, `bestandteil_grenzkraftwerk` |
@@ -70,7 +70,7 @@ Je Energieträger zusätzlich:
 | `kernkraft`        | `block`, `technologie`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve`               |
 | `verbrennung`      | `brennstoff`, `kombibetrieb`, `einsatzort`, `notstrom`, `block`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve`, `weiterer_hauptbrennstoff`, `technologie`, `datum_baubeginn`, `sicherheitsbereitschaft_ab` |
 | `gaserzeuger`      | `technologie`                                                                                |
-| `gasspeicher`      | `speicherart`, `arbeitsgasvolumen`, `ausspeicherleistung`, `einspeicherleistung`, `brennwert` |
+| `gasspeicher`      | `speicherart`, `arbeitsgasvolumen`, `ausspeicherleistung`, `brennwert`                       |
 | `gasverbraucher`   | `dient_der_stromerzeugung`                                                                   |
 | `stromverbraucher` | `anzahl_groesser_50mw`                                                                       |
 

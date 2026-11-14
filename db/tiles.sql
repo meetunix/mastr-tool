@@ -1128,7 +1128,6 @@ BEGIN
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
-                   e.maximaleeinspeicherleistung::float8 AS einspeicherleistung,
                    e.durchschnittlicherbrennwert::float8 AS brennwert
             FROM einheitengasspeicher e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer

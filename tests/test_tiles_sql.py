@@ -257,7 +257,7 @@ LAYER_FIELDS = {
         "sicherheitsbereitschaft_ab",
     ],
     "gaserzeuger": ["technologie"],
-    "gasspeicher": ["speicherart", "arbeitsgasvolumen", "ausspeicherleistung", "einspeicherleistung", "brennwert"],
+    "gasspeicher": ["speicherart", "arbeitsgasvolumen", "ausspeicherleistung", "brennwert"],
     "gasverbraucher": ["dient_der_stromerzeugung"],
     "stromverbraucher": ["anzahl_groesser_50mw"],
 }
@@ -278,6 +278,17 @@ class TestAttributes:
             for alias, column, expression in COMMON_FIELDS:
                 if column in columns:
                     assert expression in body, f"{name}: {alias}"
+
+    def test_no_layer_emits_a_column_twice(self):
+        """The same column under two aliases costs bytes twice and is almost
+        always a copy/paste slip: gasspeicher carried its injection power as
+        kw and again as einspeicherleistung."""
+        for name, body in tile_functions().items():
+            detail = body.split("ELSE")[-1]
+            columns = re.findall(r"e\.(\w+)(?:::float8)? AS \w+", detail)
+            columns += re.findall(r"to_char\(e\.(\w+), '[^']*'\) AS \w+", detail)
+            duplicates = sorted({column for column in columns if columns.count(column) > 1})
+            assert not duplicates, f"{name}: {duplicates}"
 
     @pytest.mark.parametrize("layer,fields", sorted(LAYER_FIELDS.items()))
     def test_layer_specific_fields(self, layer, fields):
