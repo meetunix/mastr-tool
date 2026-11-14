@@ -31,6 +31,9 @@
 -- bundled per grid cell (64 x 64 cells per tile) into one feature with the
 -- number of units and the summed power. A single z5 tile would otherwise
 -- contain hundreds of thousands of points and grow to several megabytes.
+-- The count is cast to bigint: sum(bigint) returns numeric, and ST_AsMVT
+-- writes numeric as a string into the value dictionary, so a client would get
+-- "1000" instead of 1000.
 --
 -- Coordinates outside the zoom level (x or y >= 2^z) are answered with an
 -- empty tile: ST_TileEnvelope raises for them and Martin turns that into a
@@ -88,7 +91,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'wind'
@@ -194,7 +197,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'solar'
@@ -301,7 +304,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'biomasse'
@@ -403,7 +406,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'wasser'
@@ -503,7 +506,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'geothermie'
@@ -603,7 +606,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'stromspeicher'
@@ -708,7 +711,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'kernkraft'
@@ -810,7 +813,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'verbrennung'
@@ -915,7 +918,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'gaserzeuger'
@@ -1011,7 +1014,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'gasspeicher'
@@ -1109,7 +1112,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl,
+                   sum(c.anzahl)::bigint AS anzahl,
                    sum(c.kw) AS kw
             FROM tiles.grid c, g
             WHERE c.layer = 'gasverbraucher'
@@ -1205,7 +1208,7 @@ BEGIN
             -- unit table, whose GiST index does random heap access
             SELECT floor(((c.cx + 0.5) * 0.01 - 180 - g.lon0) / g.dlon)::int AS cx,
                    floor(((c.cy + 0.5) * 0.01 - 90 - g.lat0) / g.dlat)::int AS cy,
-                   sum(c.anzahl) AS anzahl
+                   sum(c.anzahl)::bigint AS anzahl
             FROM tiles.grid c, g
             WHERE c.layer = 'stromverbraucher'
               AND c.cx BETWEEN floor((g.lon0 + 180) / 0.01)::int AND floor((g.lon1 + 180) / 0.01)::int

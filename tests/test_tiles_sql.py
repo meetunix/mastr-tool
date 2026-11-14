@@ -238,7 +238,7 @@ class TestBundling:
             # cell size = tile width / 64, computed in degrees
             assert "(ST_XMax(env4326) - ST_XMin(env4326)) / 64.0 AS dlon" in bundled, name
             assert "(ST_YMax(env4326) - ST_YMin(env4326)) / 64.0 AS dlat" in bundled, name
-            assert "sum(c.anzahl) AS anzahl" in bundled, name
+            assert "sum(c.anzahl)::bigint AS anzahl" in bundled, name
             assert "GROUP BY 1, 2" in bundled, name
 
     def test_bundled_branch_reads_the_pre_aggregated_grid(self):
