@@ -52,7 +52,8 @@ Jedes Feature hat `mastr_nr`, `name`, `kw`, `status` und – wo vorhanden – `p
 `status` die Katalog-ID des Betriebsstatus.
 
 Dazu kommen für alle Layer `inbetriebnahme` und `stillgelegt_am` (ISO-Datum als Text), `betreiber` (Firmenname des
-Anlagenbetreibers aus `Marktakteure`, bei natürlichen Personen Vor- und Nachname, per `LEFT JOIN`) sowie – in den acht
+Anlagenbetreibers aus `Marktakteure`, bei natürlichen Personen Vor- und Nachname, per `LEFT JOIN`), `gemeinde`,
+`gemeindeschluessel` und `aktualisiert_am` (Datum der letzten MaStR-Aktualisierung) sowie – in den acht
 Strom-Erzeugungs- und Speichertabellen – `brutto_kw`, `fernsteuerbar_nb`, `fernsteuerbar_dv` und `hochspannung`.
 Die Gas- und Verbrauchertabellen kennen diese Spalten im MaStR nicht, dort fehlen sie.
 
@@ -60,18 +61,24 @@ Je Energieträger zusätzlich:
 
 | Layer              | Felder                                                                                       |
 |--------------------|----------------------------------------------------------------------------------------------|
-| `wind`             | `nabenhoehe`, `rotordurchmesser`, `hersteller`, `typ`, `offshore`, `buergerenergie`          |
-| `solar`            | `art`, `module`, `ausrichtung`, `neigung`, `flaeche_ha`, `speicher_am_ort`, `buergerenergie` |
-| `biomasse`         | `brennstoff`, `biomasseart`, `technologie`                                                   |
-| `wasser`           | `art`                                                                                        |
-| `geothermie`       | `technologie`                                                                                |
-| `stromspeicher`    | `batterietechnologie`, `acdc`, `einsatzort`, `pumpspeicher`, `notstrom`, `wechselrichter`    |
-| `kernkraft`        | `block`, `technologie`                                                                       |
-| `verbrennung`      | `brennstoff`, `kombibetrieb`, `einsatzort`, `notstrom`, `block`                              |
+| `wind`             | `nabenhoehe`, `rotordurchmesser`, `hersteller`, `typ`, `offshore`, `buergerenergie`, `gemeinde`, `gemeindeschluessel`, `aktualisiert_am`, `rotorblattenteisung`, `nachtkennzeichnung`, `auflage_leistungsbegrenzung`, `auflage_schall_nachts`, `auflage_schall_tagsueber`, `auflage_schattenwurf`, `auflage_tierschutz`, `auflage_eiswurf`, `auflage_sonstige`, `wassertiefe` |
+| `solar`            | `art`, `module`, `ausrichtung`, `neigung`, `flaeche_ha`, `speicher_am_ort`, `buergerenergie`, `einspeisungsart`, `leistungsbegrenzung`, `nutzungsbereich`, `solaranlagenkategorie` |
+| `biomasse`         | `brennstoff`, `biomasseart`, `technologie`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve` |
+| `wasser`           | `art`, `park`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve`, `art_des_zuflusses`, `minderung_stromerzeugung`, `bestandteil_grenzkraftwerk` |
+| `geothermie`       | `technologie`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve`                        |
+| `stromspeicher`    | `batterietechnologie`, `acdc`, `einsatzort`, `pumpspeicher`, `notstrom`, `wechselrichter`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve`, `technologie`, `eeg_anlagentyp`, `pumpbetrieb_leistungsaufnahme` |
+| `kernkraft`        | `block`, `technologie`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve`               |
+| `verbrennung`      | `brennstoff`, `kombibetrieb`, `einsatzort`, `notstrom`, `block`, `einspeisungsart`, `netzreserve`, `kapazitaetsreserve`, `weiterer_hauptbrennstoff`, `technologie`, `datum_baubeginn`, `sicherheitsbereitschaft_ab` |
 | `gaserzeuger`      | `technologie`                                                                                |
-| `gasspeicher`      | `speicherart`, `arbeitsgasvolumen`, `ausspeicherleistung`                                    |
+| `gasspeicher`      | `speicherart`, `arbeitsgasvolumen`, `ausspeicherleistung`, `einspeicherleistung`, `brennwert` |
 | `gasverbraucher`   | `dient_der_stromerzeugung`                                                                   |
 | `stromverbraucher` | `anzahl_groesser_50mw`                                                                       |
+
+`einspeisungsart` ist die Katalog-ID der Einspeiseart (Voll- oder Überschusseinspeisung), `netzreserve` und
+`kapazitaetsreserve` die Teilnahme an Netz- bzw. Kapazitätsreserve. Die sieben `auflage_*`-Felder des Wind-Layers sind
+die `AuflageAbschaltung…`/`AuflagenAbschaltung…`-Spalten des MaStR. Die Flurstücksnummer bleibt bewusst draußen: sie
+ist je Einheit verschieden und würde das Value-Dictionary der Kachel um rund 480 kB aufblähen – über `mastr_nr` lässt
+sie sich gezielt nachschlagen.
 
 Katalogwerte (`status`, `art`, `brennstoff`, `hersteller`, `technologie`, …) bleiben IDs, der Client mappt sie – das
 spart Bytes gegenüber `katalog()`. Die Auswahl steht in `db/tiles.sql`.

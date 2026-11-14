@@ -139,7 +139,20 @@ BEGIN
                    e.hersteller AS hersteller,
                    e.typenbezeichnung AS typ,
                    e.windanlandoderaufsee AS offshore,
-                   e.buergerenergie AS buergerenergie
+                   e.buergerenergie AS buergerenergie,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.rotorblattenteisungssystem AS rotorblattenteisung,
+                   e.nachtkennzeichnung AS nachtkennzeichnung,
+                   e.auflageabschaltungleistungsbegrenzung AS auflage_leistungsbegrenzung,
+                   e.auflagenabschaltungschallimmissionsschutznachts AS auflage_schall_nachts,
+                   e.auflagenabschaltungschallimmissionsschutztagsueber AS auflage_schall_tagsueber,
+                   e.auflagenabschaltungschattenwurf AS auflage_schattenwurf,
+                   e.auflagenabschaltungtierschutz AS auflage_tierschutz,
+                   e.auflagenabschaltungeiswurf AS auflage_eiswurf,
+                   e.auflagenabschaltungsonstige AS auflage_sonstige,
+                   e.wassertiefe::float8 AS wassertiefe
             FROM einheitenwind e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -246,7 +259,14 @@ BEGIN
                    e.hauptausrichtungneigungswinkel AS neigung,
                    e.groessederinanspruchgenommenenflaecheinhektar::float8 AS flaeche_ha,
                    e.speicheramgleichenort AS speicher_am_ort,
-                   e.buergerenergie AS buergerenergie
+                   e.buergerenergie AS buergerenergie,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.einspeisungsart AS einspeisungsart,
+                   e.leistungsbegrenzung AS leistungsbegrenzung,
+                   e.nutzungsbereich AS nutzungsbereich,
+                   e.solaranlagenkategorie AS solaranlagenkategorie
             FROM einheitensolar e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -348,7 +368,13 @@ BEGIN
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
                    e.hauptbrennstoff AS brennstoff,
                    e.biomasseart AS biomasseart,
-                   e.technologie AS technologie
+                   e.technologie AS technologie,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.einspeisungsart AS einspeisungsart,
+                   e.netzreservezugeordnet AS netzreserve,
+                   e.kapazitaetsreservezugeordnet AS kapazitaetsreserve
             FROM einheitenbiomasse e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -439,6 +465,7 @@ BEGIN
                    ) AS geom,
                    e.einheitmastrnummer AS mastr_nr,
                    e.namestromerzeugungseinheit AS name,
+                   e.namekraftwerk AS park,
                    e.nettonennleistung::float8 AS kw,
                    e.einheitbetriebsstatus AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
@@ -448,7 +475,16 @@ BEGIN
                    e.fernsteuerbarkeitdv AS fernsteuerbar_dv,
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.artderwasserkraftanlage AS art
+                   e.artderwasserkraftanlage AS art,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.einspeisungsart AS einspeisungsart,
+                   e.netzreservezugeordnet AS netzreserve,
+                   e.kapazitaetsreservezugeordnet AS kapazitaetsreserve,
+                   e.artdeszuflusses AS art_des_zuflusses,
+                   e.minderungstromerzeugung AS minderung_stromerzeugung,
+                   e.bestandteilgrenzkraftwerk AS bestandteil_grenzkraftwerk
             FROM einheitenwasser e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -548,7 +584,13 @@ BEGIN
                    e.fernsteuerbarkeitdv AS fernsteuerbar_dv,
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.technologie AS technologie
+                   e.technologie AS technologie,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.einspeisungsart AS einspeisungsart,
+                   e.netzreservezugeordnet AS netzreserve,
+                   e.kapazitaetsreservezugeordnet AS kapazitaetsreserve
             FROM einheitengeothermiegrubengasdruckentspannung e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -653,7 +695,16 @@ BEGIN
                    e.einsatzort AS einsatzort,
                    e.pumpspeichertechnologie AS pumpspeicher,
                    e.notstromaggregat AS notstrom,
-                   e.zugeordnentewirkleistungwechselrichter::float8 AS wechselrichter
+                   e.zugeordnentewirkleistungwechselrichter::float8 AS wechselrichter,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.einspeisungsart AS einspeisungsart,
+                   e.netzreservezugeordnet AS netzreserve,
+                   e.kapazitaetsreservezugeordnet AS kapazitaetsreserve,
+                   e.technologie AS technologie,
+                   e.eeganlagentyp AS eeg_anlagentyp,
+                   e.pumpbetriebleistungsaufnahme::float8 AS pumpbetrieb_leistungsaufnahme
             FROM einheitenstromspeicher e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -755,7 +806,13 @@ BEGIN
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
                    e.namekraftwerksblock AS block,
-                   e.technologie AS technologie
+                   e.technologie AS technologie,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.einspeisungsart AS einspeisungsart,
+                   e.netzreservezugeordnet AS netzreserve,
+                   e.kapazitaetsreservezugeordnet AS kapazitaetsreserve
             FROM einheitenkernkraft e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -860,7 +917,17 @@ BEGIN
                    e.anlageistimkombibetrieb AS kombibetrieb,
                    e.einsatzort AS einsatzort,
                    e.notstromaggregat AS notstrom,
-                   e.namekraftwerksblock AS block
+                   e.namekraftwerksblock AS block,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.einspeisungsart AS einspeisungsart,
+                   e.netzreservezugeordnet AS netzreserve,
+                   e.kapazitaetsreservezugeordnet AS kapazitaetsreserve,
+                   e.weitererhauptbrennstoff AS weiterer_hauptbrennstoff,
+                   e.technologie AS technologie,
+                   to_char(e.datumbaubeginn, 'YYYY-MM-DD') AS datum_baubeginn,
+                   to_char(e.sicherheitsbereitschaftabdatum, 'YYYY-MM-DD') AS sicherheitsbereitschaft_ab
             FROM einheitenverbrennung e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -956,7 +1023,10 @@ BEGIN
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.technologie AS technologie
+                   e.technologie AS technologie,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am
             FROM einheitengaserzeuger e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -1054,7 +1124,12 @@ BEGIN
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
                    e.speicherart AS speicherart,
                    e.maximalnutzbaresarbeitsgasvolumen::float8 AS arbeitsgasvolumen,
-                   e.maximaleausspeicherleistung::float8 AS ausspeicherleistung
+                   e.maximaleausspeicherleistung::float8 AS ausspeicherleistung,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
+                   e.maximaleeinspeicherleistung::float8 AS einspeicherleistung,
+                   e.durchschnittlicherbrennwert::float8 AS brennwert
             FROM einheitengasspeicher e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -1150,7 +1225,10 @@ BEGIN
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.einheitdientderstromerzeugung AS dient_der_stromerzeugung
+                   e.einheitdientderstromerzeugung AS dient_der_stromerzeugung,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am
             FROM einheitengasverbraucher e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
@@ -1244,7 +1322,10 @@ BEGIN
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.anzahlstromverbrauchseinheitengroesser50mw AS anzahl_groesser_50mw
+                   e.anzahlstromverbrauchseinheitengroesser50mw AS anzahl_groesser_50mw,
+                   e.gemeinde AS gemeinde,
+                   e.gemeindeschluessel AS gemeindeschluessel,
+                   to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am
             FROM einheitenstromverbraucher e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
             CROSS JOIN b
