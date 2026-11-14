@@ -269,7 +269,7 @@ class EinheitSolar(Enum):
     LichteHoehe = Column(Type.NUMERIC)
     InbetriebnahmedatumAmAktuellenStandort = Column(Type.DATE)
     VorlaeufigeRegelzonenDerEinheit = Column(Type.TEXT)
-    SolaranlagenKategorie = Column(Type.INT)
+    SolaranlagenKategorie = Column(Type.INT, udf=SelectUDFs.Katalog)
 
 class EinheitBiomasse(Enum):
     EinheitMastrNummer = Column(Type.TEXT, not_null=True, primary_key=True)
@@ -472,7 +472,7 @@ class EinheitStromSpeicher(Enum):
     ZugeordnenteWirkleistungWechselrichter = Column(Type.NUMERIC)
     SpeMastrNummer = Column(Type.TEXT)
     EegMaStRNummer = Column(Type.TEXT)
-    EegAnlagentyp = Column(Type.INT)  # system catalog (values 1-10), not a Katalogwert
+    EegAnlagentyp = Column(Type.INT)  # system catalog (Einheitentypen), not a Katalogwert
     Technologie = Column(Type.INT, udf=SelectUDFs.Katalog)
     GemeinsamRegistrierteSolareinheitMastrNummer = Column(Type.TEXT)
     NetzreserveZugeordnet = Column(Type.BOOLEAN, udf=SelectUDFs.Boolean)

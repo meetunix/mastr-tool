@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from db.entities import Einheiten, GeomIndices, MAP_INDEX_CONDITION
+from db.entities import Einheiten, GeomIndices, MAP_INDEX_CONDITION, SelectUDFs
 
 TILES_SQL = Path(__file__).resolve().parent.parent / "db" / "tiles.sql"
 GRID_SQL = Path(__file__).resolve().parent.parent / "db" / "grid.sql"
@@ -286,8 +286,9 @@ class TestAttributes:
         kw and again as einspeicherleistung."""
         for name, body in tile_functions().items():
             detail = body.split("ELSE")[-1]
-            columns = re.findall(r"e\.(\w+)(?:::float8)? AS \w+", detail)
+            columns = re.findall(r"\be\.(\w+)(?:::float8)? AS \w+", detail)
             columns += re.findall(r"to_char\(e\.(\w+), '[^']*'\) AS \w+", detail)
+            columns += re.findall(r"LEFT JOIN katalogwerte \w+ ON \w+\.id = e\.(\w+)", detail)
             duplicates = sorted({column for column in columns if columns.count(column) > 1})
             assert not duplicates, f"{name}: {duplicates}"
 
@@ -296,6 +297,52 @@ class TestAttributes:
         body = tile_functions()[layer]
         for field in fields:
             assert f" AS {field}" in body, f"{layer}: {field}"
+
+
+class TestCatalogValues:
+    """Catalog IDs are resolved to their labels in the tile.
+
+    A client should not need the katalogwerte table to display "Endgültig
+    stillgelegt" instead of 38. The labels come from a LEFT JOIN on the
+    primary key, not from katalog(): the function runs one index lookup per
+    row and column, the join uses the primary key index.
+    """
+
+    def test_no_catalog_column_is_emitted_raw(self):
+        for name, body in tile_functions().items():
+            detail = body.split("ELSE")[-1]
+            catalog = {
+                column.name.lower()
+                for column in entity_of(source_table(body))
+                if column.value.udf is SelectUDFs.Katalog
+            }
+            for column in catalog:
+                assert not re.search(rf"e\.{column}(?:::float8)? AS \w+", detail), f"{name}: {column}"
+
+    def test_every_catalog_join_is_selected(self):
+        for name, body in tile_functions().items():
+            detail = body.split("ELSE")[-1]
+            joins = re.findall(r"LEFT JOIN katalogwerte (\w+) ON \1\.id = e\.(\w+)", detail)
+            for alias, column in joins:
+                assert (
+                    re.search(rf"{alias}\.wert AS \w+", detail) or f"coalesce({alias}.wert" in detail
+                ), f"{name}: {alias} ({column}) is joined but not selected"
+
+    def test_eeg_anlagentyp_uses_the_einheitentypen_catalog(self):
+        """EegAnlagentyp is Katalogkategorie Einheitentyp, a separate table."""
+        body = tile_functions()["stromspeicher"]
+        assert "LEFT JOIN einheitentypen k_eeg_anlagentyp ON k_eeg_anlagentyp.id = e.eeganlagentyp" in body
+        assert "k_eeg_anlagentyp.wert AS eeg_anlagentyp" in body
+
+    def test_solaranlagenkategorie_is_resolved(self):
+        """The field is a Katalogwert (Solaranlagen-Kategorie) and is flagged
+        as such in db/entities.py, so the tile resolves it like the others."""
+        body = tile_functions()["solar"]
+        assert (
+            "LEFT JOIN katalogwerte k_solaranlagenkategorie "
+            "ON k_solaranlagenkategorie.id = e.solaranlagenkategorie" in body
+        )
+        assert "k_solaranlagenkategorie.wert AS solaranlagenkategorie" in body
 
 
 class TestBundling:

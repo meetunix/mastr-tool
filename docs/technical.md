@@ -49,7 +49,7 @@ Import läuft dann mit einer Warnung weiter.
 
 Jedes Feature hat `mastr_nr`, `name`, `kw`, `status` und – wo vorhanden – `park` (Windpark, Solarpark, Kraftwerk).
 `kw` ist die Nettonennleistung (bei Gaserzeugern, Gas- und Stromspeichern die jeweilige Leistungsspalte des MaStR),
-`status` die Katalog-ID des Betriebsstatus.
+`status` der Betriebsstatus als Text (z. B. „In Betrieb“, „Endgültig stillgelegt“).
 
 Dazu kommen für alle Layer `inbetriebnahme` und `stillgelegt_am` (ISO-Datum als Text), `betreiber` (Firmenname des
 Anlagenbetreibers aus `Marktakteure`, bei natürlichen Personen Vor- und Nachname, per `LEFT JOIN`), `gemeinde`,
@@ -74,14 +74,17 @@ Je Energieträger zusätzlich:
 | `gasverbraucher`   | `dient_der_stromerzeugung`                                                                   |
 | `stromverbraucher` | `anzahl_groesser_50mw`                                                                       |
 
-`einspeisungsart` ist die Katalog-ID der Einspeiseart (Voll- oder Überschusseinspeisung), `netzreserve` und
-`kapazitaetsreserve` die Teilnahme an Netz- bzw. Kapazitätsreserve. Die sieben `auflage_*`-Felder des Wind-Layers sind
-die `AuflageAbschaltung…`/`AuflagenAbschaltung…`-Spalten des MaStR. Die Flurstücksnummer bleibt bewusst draußen: sie
-ist je Einheit verschieden und würde das Value-Dictionary der Kachel um rund 480 kB aufblähen – über `mastr_nr` lässt
-sie sich gezielt nachschlagen.
+`einspeisungsart` ist die Einspeiseart als Text (Volleinspeisung oder Teileinspeisung einschließlich Eigenverbrauch),
+`netzreserve` und `kapazitaetsreserve` die Teilnahme an Netz- bzw. Kapazitätsreserve. Die sieben `auflage_*`-Felder des
+Wind-Layers sind die `AuflageAbschaltung…`/`AuflagenAbschaltung…`-Spalten des MaStR. Die Flurstücksnummer bleibt
+bewusst draußen: sie ist je Einheit verschieden und würde das Value-Dictionary der Kachel um rund 480 kB aufblähen –
+über `mastr_nr` lässt sie sich gezielt nachschlagen.
 
-Katalogwerte (`status`, `art`, `brennstoff`, `hersteller`, `technologie`, …) bleiben IDs, der Client mappt sie – das
-spart Bytes gegenüber `katalog()`. Die Auswahl steht in `db/tiles.sql`.
+Katalogwerte (`status`, `art`, `brennstoff`, `hersteller`, `technologie`, …) werden im Tile aufgelöst: ein `LEFT JOIN`
+auf `katalogwerte` liefert den Text statt der ID, `eeg_anlagentyp` kommt aus der eigenen Tabelle `einheitentypen`.
+Das MVT-Value-Dictionary speichert jedes verschiedene Label nur einmal je Kachel, deshalb hängt der Größenzuwachs an
+der Zahl der verschiedenen Werte, nicht an der Zahl der Features. Unbekannte IDs bleiben `NULL`, wie im
+CSV-/Parquet-Export. Die Auswahl steht in `db/tiles.sql`.
 
 Jeder Layer bündelt seine Punkte unterhalb einer Zoomstufe je Rasterzelle (64 × 64 Zellen pro Kachel) zu einem
 Feature mit `anzahl` und `kw`; darüber kommt jede Einheit einzeln. Die Grenze hängt an der Zahl der Einheiten: Solar

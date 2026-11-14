@@ -24,8 +24,15 @@
 -- hochspannung, stillgelegt_am) and the fields of the energy carrier. The
 -- operator name comes from a LEFT JOIN on Marktakteure: Firmenname, for natural
 -- persons the first and last name. Every attribute makes the tiles bigger, so
--- the list is deliberate; catalog values are kept as IDs (the client maps
--- them).
+-- the list is deliberate.
+--
+-- Catalog values are resolved to their labels with a LEFT JOIN on katalogwerte
+-- (eeg_anlagentyp on einheitentypen), so a client can display "Endgültig
+-- stillgelegt" instead of 38 without a mapping of its own. The join uses the
+-- primary key index and costs a fraction of katalog() per row and column; the
+-- MVT value dictionary stores each distinct label once per tile, so the extra
+-- bytes depend on the number of distinct values, not on the number of
+-- features. Unknown IDs stay NULL, like in the CSV/Parquet export.
 --
 -- Solar and Stromspeicher have millions of units: below zoom 10 the points are
 -- bundled per grid cell (64 x 64 cells per tile) into one feature with the
@@ -126,7 +133,7 @@ BEGIN
                    e.namestromerzeugungseinheit AS name,
                    e.namewindpark AS park,
                    e.nettonennleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    e.bruttoleistung::float8 AS brutto_kw,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
@@ -136,14 +143,14 @@ BEGIN
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
                    e.nabenhoehe::float8 AS nabenhoehe,
                    e.rotordurchmesser::float8 AS rotordurchmesser,
-                   e.hersteller AS hersteller,
+                   k_hersteller.wert AS hersteller,
                    e.typenbezeichnung AS typ,
-                   e.windanlandoderaufsee AS offshore,
+                   k_offshore.wert AS offshore,
                    e.buergerenergie AS buergerenergie,
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
-                   e.einspeisungsart AS einspeisungsart,
+                   k_einspeisungsart.wert AS einspeisungsart,
                    e.rotorblattenteisungssystem AS rotorblattenteisung,
                    e.nachtkennzeichnung AS nachtkennzeichnung,
                    e.auflageabschaltungleistungsbegrenzung AS auflage_leistungsbegrenzung,
@@ -156,6 +163,10 @@ BEGIN
                    e.wassertiefe::float8 AS wassertiefe
             FROM einheitenwind e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_hersteller ON k_hersteller.id = e.hersteller
+            LEFT JOIN katalogwerte k_offshore ON k_offshore.id = e.windanlandoderaufsee
+            LEFT JOIN katalogwerte k_einspeisungsart ON k_einspeisungsart.id = e.einspeisungsart
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -246,7 +257,7 @@ BEGIN
                    e.namestromerzeugungseinheit AS name,
                    e.namedessolarparks AS park,
                    e.nettonennleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    e.bruttoleistung::float8 AS brutto_kw,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
@@ -254,22 +265,30 @@ BEGIN
                    e.fernsteuerbarkeitdv AS fernsteuerbar_dv,
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.artdersolaranlage AS art,
+                   k_art.wert AS art,
                    e.anzahlmodule AS module,
-                   e.hauptausrichtung AS ausrichtung,
-                   e.hauptausrichtungneigungswinkel AS neigung,
+                   k_ausrichtung.wert AS ausrichtung,
+                   k_neigung.wert AS neigung,
                    e.groessederinanspruchgenommenenflaecheinhektar::float8 AS flaeche_ha,
                    e.speicheramgleichenort AS speicher_am_ort,
                    e.buergerenergie AS buergerenergie,
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
-                   e.einspeisungsart AS einspeisungsart,
-                   e.leistungsbegrenzung AS leistungsbegrenzung,
-                   e.nutzungsbereich AS nutzungsbereich,
-                   e.solaranlagenkategorie AS solaranlagenkategorie
+                   k_einspeisungsart.wert AS einspeisungsart,
+                   k_leistungsbegrenzung.wert AS leistungsbegrenzung,
+                   k_nutzungsbereich.wert AS nutzungsbereich,
+                   k_solaranlagenkategorie.wert AS solaranlagenkategorie
             FROM einheitensolar e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_art ON k_art.id = e.artdersolaranlage
+            LEFT JOIN katalogwerte k_ausrichtung ON k_ausrichtung.id = e.hauptausrichtung
+            LEFT JOIN katalogwerte k_neigung ON k_neigung.id = e.hauptausrichtungneigungswinkel
+            LEFT JOIN katalogwerte k_einspeisungsart ON k_einspeisungsart.id = e.einspeisungsart
+            LEFT JOIN katalogwerte k_leistungsbegrenzung ON k_leistungsbegrenzung.id = e.leistungsbegrenzung
+            LEFT JOIN katalogwerte k_nutzungsbereich ON k_nutzungsbereich.id = e.nutzungsbereich
+            LEFT JOIN katalogwerte k_solaranlagenkategorie ON k_solaranlagenkategorie.id = e.solaranlagenkategorie
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -359,7 +378,7 @@ BEGIN
                    e.einheitmastrnummer AS mastr_nr,
                    e.namestromerzeugungseinheit AS name,
                    e.nettonennleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    e.bruttoleistung::float8 AS brutto_kw,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
@@ -367,17 +386,22 @@ BEGIN
                    e.fernsteuerbarkeitdv AS fernsteuerbar_dv,
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.hauptbrennstoff AS brennstoff,
-                   e.biomasseart AS biomasseart,
-                   e.technologie AS technologie,
+                   k_brennstoff.wert AS brennstoff,
+                   k_biomasseart.wert AS biomasseart,
+                   k_technologie.wert AS technologie,
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
-                   e.einspeisungsart AS einspeisungsart,
+                   k_einspeisungsart.wert AS einspeisungsart,
                    e.netzreservezugeordnet AS netzreserve,
                    e.kapazitaetsreservezugeordnet AS kapazitaetsreserve
             FROM einheitenbiomasse e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_brennstoff ON k_brennstoff.id = e.hauptbrennstoff
+            LEFT JOIN katalogwerte k_biomasseart ON k_biomasseart.id = e.biomasseart
+            LEFT JOIN katalogwerte k_technologie ON k_technologie.id = e.technologie
+            LEFT JOIN katalogwerte k_einspeisungsart ON k_einspeisungsart.id = e.einspeisungsart
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -468,7 +492,7 @@ BEGIN
                    e.namestromerzeugungseinheit AS name,
                    e.namekraftwerk AS park,
                    e.nettonennleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    e.bruttoleistung::float8 AS brutto_kw,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
@@ -476,18 +500,22 @@ BEGIN
                    e.fernsteuerbarkeitdv AS fernsteuerbar_dv,
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.artderwasserkraftanlage AS art,
+                   k_art.wert AS art,
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
-                   e.einspeisungsart AS einspeisungsart,
+                   k_einspeisungsart.wert AS einspeisungsart,
                    e.netzreservezugeordnet AS netzreserve,
                    e.kapazitaetsreservezugeordnet AS kapazitaetsreserve,
-                   e.artdeszuflusses AS art_des_zuflusses,
+                   k_art_des_zuflusses.wert AS art_des_zuflusses,
                    e.minderungstromerzeugung AS minderung_stromerzeugung,
                    e.bestandteilgrenzkraftwerk AS bestandteil_grenzkraftwerk
             FROM einheitenwasser e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_art ON k_art.id = e.artderwasserkraftanlage
+            LEFT JOIN katalogwerte k_einspeisungsart ON k_einspeisungsart.id = e.einspeisungsart
+            LEFT JOIN katalogwerte k_art_des_zuflusses ON k_art_des_zuflusses.id = e.artdeszuflusses
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -577,7 +605,7 @@ BEGIN
                    e.einheitmastrnummer AS mastr_nr,
                    e.namestromerzeugungseinheit AS name,
                    e.nettonennleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    e.bruttoleistung::float8 AS brutto_kw,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
@@ -585,15 +613,18 @@ BEGIN
                    e.fernsteuerbarkeitdv AS fernsteuerbar_dv,
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.technologie AS technologie,
+                   k_technologie.wert AS technologie,
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
-                   e.einspeisungsart AS einspeisungsart,
+                   k_einspeisungsart.wert AS einspeisungsart,
                    e.netzreservezugeordnet AS netzreserve,
                    e.kapazitaetsreservezugeordnet AS kapazitaetsreserve
             FROM einheitengeothermiegrubengasdruckentspannung e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_technologie ON k_technologie.id = e.technologie
+            LEFT JOIN katalogwerte k_einspeisungsart ON k_einspeisungsart.id = e.einspeisungsart
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -683,7 +714,7 @@ BEGIN
                    e.einheitmastrnummer AS mastr_nr,
                    e.namestromerzeugungseinheit AS name,
                    e.nettonennleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    e.bruttoleistung::float8 AS brutto_kw,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
@@ -691,23 +722,31 @@ BEGIN
                    e.fernsteuerbarkeitdv AS fernsteuerbar_dv,
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.batterietechnologie AS batterietechnologie,
-                   e.acdckoppelung AS acdc,
-                   e.einsatzort AS einsatzort,
-                   e.pumpspeichertechnologie AS pumpspeicher,
+                   k_batterietechnologie.wert AS batterietechnologie,
+                   k_acdc.wert AS acdc,
+                   k_einsatzort.wert AS einsatzort,
+                   k_pumpspeicher.wert AS pumpspeicher,
                    e.notstromaggregat AS notstrom,
                    e.zugeordnentewirkleistungwechselrichter::float8 AS wechselrichter,
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
-                   e.einspeisungsart AS einspeisungsart,
+                   k_einspeisungsart.wert AS einspeisungsart,
                    e.netzreservezugeordnet AS netzreserve,
                    e.kapazitaetsreservezugeordnet AS kapazitaetsreserve,
-                   e.technologie AS technologie,
-                   e.eeganlagentyp AS eeg_anlagentyp,
+                   k_technologie.wert AS technologie,
+                   k_eeg_anlagentyp.wert AS eeg_anlagentyp,
                    e.pumpbetriebleistungsaufnahme::float8 AS pumpbetrieb_leistungsaufnahme
             FROM einheitenstromspeicher e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_batterietechnologie ON k_batterietechnologie.id = e.batterietechnologie
+            LEFT JOIN katalogwerte k_acdc ON k_acdc.id = e.acdckoppelung
+            LEFT JOIN katalogwerte k_einsatzort ON k_einsatzort.id = e.einsatzort
+            LEFT JOIN katalogwerte k_pumpspeicher ON k_pumpspeicher.id = e.pumpspeichertechnologie
+            LEFT JOIN katalogwerte k_einspeisungsart ON k_einspeisungsart.id = e.einspeisungsart
+            LEFT JOIN katalogwerte k_technologie ON k_technologie.id = e.technologie
+            LEFT JOIN einheitentypen k_eeg_anlagentyp ON k_eeg_anlagentyp.id = e.eeganlagentyp
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -798,7 +837,7 @@ BEGIN
                    e.namestromerzeugungseinheit AS name,
                    e.namekraftwerk AS park,
                    e.nettonennleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    e.bruttoleistung::float8 AS brutto_kw,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
@@ -807,15 +846,18 @@ BEGIN
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
                    e.namekraftwerksblock AS block,
-                   e.technologie AS technologie,
+                   k_technologie.wert AS technologie,
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
-                   e.einspeisungsart AS einspeisungsart,
+                   k_einspeisungsart.wert AS einspeisungsart,
                    e.netzreservezugeordnet AS netzreserve,
                    e.kapazitaetsreservezugeordnet AS kapazitaetsreserve
             FROM einheitenkernkraft e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_technologie ON k_technologie.id = e.technologie
+            LEFT JOIN katalogwerte k_einspeisungsart ON k_einspeisungsart.id = e.einspeisungsart
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -906,7 +948,7 @@ BEGIN
                    e.namestromerzeugungseinheit AS name,
                    e.namekraftwerk AS park,
                    e.nettonennleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    e.bruttoleistung::float8 AS brutto_kw,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
@@ -914,23 +956,29 @@ BEGIN
                    e.fernsteuerbarkeitdv AS fernsteuerbar_dv,
                    e.anschlussanhoechstoderhochspannung AS hochspannung,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.hauptbrennstoff AS brennstoff,
+                   k_brennstoff.wert AS brennstoff,
                    e.anlageistimkombibetrieb AS kombibetrieb,
-                   e.einsatzort AS einsatzort,
+                   k_einsatzort.wert AS einsatzort,
                    e.notstromaggregat AS notstrom,
                    e.namekraftwerksblock AS block,
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am,
-                   e.einspeisungsart AS einspeisungsart,
+                   k_einspeisungsart.wert AS einspeisungsart,
                    e.netzreservezugeordnet AS netzreserve,
                    e.kapazitaetsreservezugeordnet AS kapazitaetsreserve,
-                   e.weitererhauptbrennstoff AS weiterer_hauptbrennstoff,
-                   e.technologie AS technologie,
+                   k_weiterer_hauptbrennstoff.wert AS weiterer_hauptbrennstoff,
+                   k_technologie.wert AS technologie,
                    to_char(e.datumbaubeginn, 'YYYY-MM-DD') AS datum_baubeginn,
                    to_char(e.sicherheitsbereitschaftabdatum, 'YYYY-MM-DD') AS sicherheitsbereitschaft_ab
             FROM einheitenverbrennung e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_brennstoff ON k_brennstoff.id = e.hauptbrennstoff
+            LEFT JOIN katalogwerte k_einsatzort ON k_einsatzort.id = e.einsatzort
+            LEFT JOIN katalogwerte k_einspeisungsart ON k_einspeisungsart.id = e.einspeisungsart
+            LEFT JOIN katalogwerte k_weiterer_hauptbrennstoff ON k_weiterer_hauptbrennstoff.id = e.weitererhauptbrennstoff
+            LEFT JOIN katalogwerte k_technologie ON k_technologie.id = e.technologie
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -1020,16 +1068,18 @@ BEGIN
                    e.einheitmastrnummer AS mastr_nr,
                    e.namegaserzeugungseinheit AS name,
                    e.erzeugungsleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.technologie AS technologie,
+                   k_technologie.wert AS technologie,
                    e.gemeinde AS gemeinde,
                    e.gemeindeschluessel AS gemeindeschluessel,
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am
             FROM einheitengaserzeuger e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_technologie ON k_technologie.id = e.technologie
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -1119,11 +1169,11 @@ BEGIN
                    e.einheitmastrnummer AS mastr_nr,
                    e.namegasspeicher AS name,
                    e.maximaleeinspeicherleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
-                   e.speicherart AS speicherart,
+                   k_speicherart.wert AS speicherart,
                    e.maximalnutzbaresarbeitsgasvolumen::float8 AS arbeitsgasvolumen,
                    e.maximaleausspeicherleistung::float8 AS ausspeicherleistung,
                    e.gemeinde AS gemeinde,
@@ -1132,6 +1182,8 @@ BEGIN
                    e.durchschnittlicherbrennwert::float8 AS brennwert
             FROM einheitengasspeicher e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
+            LEFT JOIN katalogwerte k_speicherart ON k_speicherart.id = e.speicherart
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -1221,7 +1273,7 @@ BEGIN
                    e.einheitmastrnummer AS mastr_nr,
                    e.namegasverbrauchsseinheit AS name,
                    e.maximalegasbezugsleistung::float8 AS kw,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
@@ -1231,6 +1283,7 @@ BEGIN
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am
             FROM einheitengasverbraucher e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
@@ -1318,7 +1371,7 @@ BEGIN
                    ) AS geom,
                    e.einheitmastrnummer AS mastr_nr,
                    e.namestromverbrauchseinheit AS name,
-                   e.einheitbetriebsstatus AS status,
+                   k_status.wert AS status,
                    to_char(e.inbetriebnahmedatum, 'YYYY-MM-DD') AS inbetriebnahme,
                    coalesce(m.firmenname, nullif(concat_ws(' ', m.marktakteurvorname, m.marktakteurnachname), '')) AS betreiber,
                    to_char(e.datumendgueltigestilllegung, 'YYYY-MM-DD') AS stillgelegt_am,
@@ -1328,6 +1381,7 @@ BEGIN
                    to_char(e.datumletzteaktualisierung, 'YYYY-MM-DD') AS aktualisiert_am
             FROM einheitenstromverbraucher e
             LEFT JOIN marktakteure m ON m.mastrnummer = e.anlagenbetreibermastrnummer
+            LEFT JOIN katalogwerte k_status ON k_status.id = e.einheitbetriebsstatus
             CROSS JOIN b
             WHERE ST_SetSRID(ST_MakePoint(e.laengengrad::float8, e.breitengrad::float8), 4326) && b.env4326
               AND e.breitengrad BETWEEN -90 AND 90
