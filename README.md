@@ -148,7 +148,7 @@ Die TileJSON (`/tiles.wind`) enthält Zoombereich, Bounds, Attribution und das A
 Attribute selbst sind bereits aufgelöste Katalogwerte (z. B. `status: "In Betrieb"`), keine IDs.
 
 Die Hintergrundkarte kommt vom Client (OSM, basemap.de, …), MVT enthält nur die Punkte. Die Daten stammen aus dem
-zuletzt importierten Dump; der Cache kann sie bis zu 12 h halten.
+zuletzt importierten Dump; der Cache kann sie bis zu 24 h halten.
 
 ### Eigenes Deployment
 

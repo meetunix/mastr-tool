@@ -13,7 +13,7 @@ listen_addresses: ${MARTIN_LISTEN_ADDRESSES:-0.0.0.0:7800}
 
 # In-memory tile cache, shared by all workers. The TTL is what makes it safe:
 # without one, Martin would serve tiles from before an import until the cache
-# is evicted by size pressure. The MaStR changes at most once a day, so 12h
+# is evicted by size pressure. The MaStR changes at most once a day, so 24h
 # bounds the staleness after an import while keeping the cache effective for
 # low traffic - and it keeps the map served from cache during the multi-hour
 # import, when the tables are dropped and rebuilt.
@@ -21,10 +21,10 @@ listen_addresses: ${MARTIN_LISTEN_ADDRESSES:-0.0.0.0:7800}
 # Only the tile cache is used: the PMTiles, font and sprite caches are budgets
 # that stay empty (they allocate nothing until something is stored).
 cache:
-  size_mb: 512
-  # tiles get half of size_mb by default
-  tile_size_mb: 512
-  tile_expiry: 12h
+  size_mb: 768
+  # the tile cache is the only one used, so it gets the full budget
+  tile_size_mb: 768
+  tile_expiry: 24h
   maxzoom: 14
 cache_control: "public, max-age=3600"
 

@@ -98,7 +98,7 @@ martin:
     tls: []
       # - secretName: mastr-tiles-tls
       #   hosts: [mastr-tiles.local]
-  # The tile cache in files/martin.yaml is configured for 512 MiB, so a memory
+  # The tile cache in files/martin.yaml is configured for 768 MiB, so a memory
   # limit must leave headroom above that (e.g. 1024Mi).
   resources: {}
   nodeSelector: {}

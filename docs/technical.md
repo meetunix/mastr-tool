@@ -132,7 +132,7 @@ identisch
 zu `martin/config.yaml`); Verbindungs-URL und Port kommen über `MARTIN_DATABASE_URL` und `MARTIN_LISTEN_ADDRESSES` aus
 der Umgebung. Das Deployment wartet im Standalone-Modus auf die Datenbank.
 
-Der Kachel-Cache ist auf 512 MiB und eine TTL von 12 h konfiguriert (`cache` in `martin/config.yaml`). Nach jedem Import
+Der Kachel-Cache ist auf 768 MiB und eine TTL von 24 h konfiguriert (`cache` in `martin/config.yaml`). Nach jedem Import
 leert `download-mastr.sh` ihn über `DELETE /cache/{source_id}` (Endpunkt `endpoints.purge_cache`), damit die Karte
 sofort die neuen Daten zeigt. Die TTL ist nur noch das Sicherheitsnetz, falls der Purge nicht durchgeht; während des
 mehrstündigen Imports selbst liefert der Cache weiter die alten Kacheln, statt mit Fehlern zu antworten.
@@ -141,7 +141,7 @@ Die Adresse des Tile-Servers für den Purge kommt aus `MARTIN_URL` (Compose: `ht
 `http://<release>-martin:7800`). Ist sie leer oder Martin nicht erreichbar, wird nur gewarnt – der Import läuft
 weiter.
 
-Ein Memory-Limit für den Container muss über 512 MiB Luft lassen – bei `limits.memory: 512Mi` würde Martin durch den
+Ein Memory-Limit für den Container muss über 768 MiB Luft lassen – bei `limits.memory: 768Mi` würde Martin durch den
 Cache selbst in den OOM-Kill laufen. Die PMTiles-, Font- und Sprite-Caches bleiben leer, ihre Budgets werden nicht vorab
 belegt.
 
@@ -152,18 +152,18 @@ Bewusste Container-Limits gibt es nicht – der OOM-Killer des Hosts entscheidet
 der größte Verbraucher. Ein paar GB Swap auf dem Host sind die günstigere Versicherung: die Datenbank lässt sich aus
 dem Dump neu aufbauen, ein OOM-Kill mitten im mehrstündigen Import kostet dagegen Stunden.
 
-| Verbraucher | RSS |
-| --- | --- |
-| OS + Docker | ~400 MB |
-| Postgres (256 MB `shared_buffers` + ~15 Backends) | ~450 MB |
-| Martin (512 MB Kachel-Cache + Overhead) | ~600 MB |
-| mastr-app | ~150 MB |
-| mastr-static | ~30 MB |
-| **Leerlauf** | **~1,6 GB** |
-| Import, 4 Worker (`iterparse` + COPY-Batches zu 1000 Zeilen) | ~400 MB |
-| `CREATE INDEX` (`maintenance_work_mem`) | ~260 MB |
+| Verbraucher                                                  | RSS         |
+|--------------------------------------------------------------|-------------|
+| OS + Docker                                                  | ~400 MB     |
+| Postgres (256 MB `shared_buffers` + ~15 Backends)            | ~450 MB     |
+| Martin (768 MB Kachel-Cache + Overhead)                      | ~850 MB     |
+| mastr-app                                                    | ~150 MB     |
+| mastr-static                                                 | ~30 MB      |
+| **Leerlauf**                                                 | **~1,9 GB** |
+| Import, 4 Worker (`iterparse` + COPY-Batches zu 1000 Zeilen) | ~400 MB     |
+| `CREATE INDEX` (`maintenance_work_mem`)                      | ~260 MB     |
 
-Damit bleiben im Peak rund 700 MB Luft. Drei Konsequenzen für Postgres:
+Damit bleiben im Peak rund 500 MB Luft. Drei Konsequenzen für Postgres:
 
 - `shared_buffers` bleibt bei 256 MB. Der OS-Page-Cache deckt den Rest, ein größerer Wert würde dem Import den Platz
   wegnehmen.
